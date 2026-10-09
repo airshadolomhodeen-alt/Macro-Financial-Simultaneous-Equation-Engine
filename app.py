@@ -9,7 +9,6 @@ import pandas as pd
 import numpy as np
 import requests
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
@@ -165,7 +164,7 @@ with c4:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- UNIFIED WORKSPACE TABS (CONDENSED & ADVANCED) ---
+# --- UNIFIED WORKSPACE TABS ---
 tab_struct, tab_diag, tab_forecast, tab_lab = st.tabs([
     "📊 Structural Estimation & Decision Matrix", 
     "🔍 Econometric Diagnostics & IV Strength", 
@@ -180,7 +179,6 @@ with tab_struct:
         st.markdown("### 🔬 Structural Equation Estimation Output")
         st.markdown(f"**Active Specification:** `{eq_choice}` evaluated via `{estimator_mode}`")
         
-        # Dynamic decision output based on estimator
         if "2SLS" in estimator_mode:
             st.markdown('<span class="decision-badge-success">✓ Simultaneity Bias Corrected via 2SLS</span>', unsafe_allow_html=True)
             res_table = pd.DataFrame({
@@ -285,7 +283,6 @@ with tab_forecast:
         
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Probability distribution chart
     fig_prob = go.Figure(data=[go.Bar(
         x=["UP (Bullish)", "DOWN (Bearish)", "NEUTRAL"],
         y=[67.4, 22.6, 10.0],
@@ -322,13 +319,13 @@ with tab_lab:
     st.markdown("#### OLS vs. 2SLS Coefficient Magnitude Comparison")
     comp_data = pd.DataFrame({
         "Structural Parameter": ["DXY Impact", "Fed Funds Rate", "CPI Inflation", "M2 Money Supply"],
-        "Naive OLS (Biased)": [-8.15, -12.40, 5.20, 0.018],
-        "Proper 2SLS (Consistent)": [-18.32, -45.60, 12.40, 0.042]
+        "Naive OLS": [-8.15, -12.40, 5.20, 0.018],
+        "Proper 2SLS": [-18.32, -45.60, 12.40, 0.042]
     })
     
     fig_bar = go.Figure(data=[
         go.Bar(name='Naive OLS', x=comp_data["Structural Parameter"], y=comp_data["Naive OLS"], marker_color='#8b949e'),
-        go.Bar(name='Proper 2SLS', x=comp_data["Structural Parameter"], y=comp_data["Proper 2SLS (Consistent)"], marker_color='#cc850d')
+        go.Bar(name='Proper 2SLS', x=comp_data["Structural Parameter"], y=comp_data["Proper 2SLS"], marker_color='#cc850d')
     ])
     fig_bar.update_layout(
         barmode='group', title="Magnitude Shift: Eliminating Simultaneity Bias",
