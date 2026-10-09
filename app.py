@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial XAU/USD Live Terminal"
-    VERSION: str = "10.0.0-StrictLiveSync"
+    VERSION: str = "10.1.0-StrictLiveSync"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "9ce568bbed6778edaf3fb5ab4044abde")
     
@@ -77,8 +77,18 @@ def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
             df = pd.DataFrame(data["values"])
             df["datetime"] = pd.to_datetime(df["datetime"])
             df = df.sort_values("datetime").set_index("datetime")
-            for col in ["open", "high", "low", "close", "volume"]:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
+            
+            # Safely convert price columns (volume is optional on spot FX/Metals feeds)
+            price_cols = ["open", "high", "low", "close"]
+            for col in price_cols:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+            
+            if "volume" in df.columns:
+                df["volume"] = pd.to_numeric(df["volume"], errors="coerce").fillna(0)
+            else:
+                df["volume"] = 0.0
+
             logger.info("Successfully fetched live OANDA market feed.")
             return process_features(df)
         else:
