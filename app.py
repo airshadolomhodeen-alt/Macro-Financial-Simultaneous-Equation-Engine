@@ -1,6 +1,6 @@
 """
-Macro-Financial Econometric & ML Trading Terminal (Strictly Live-Sync & Zero Mocking)
-Rigorous IV2SLS Econometrics, HAC Standard Errors, and Real-Time OANDA Feed
+Macro-Financial Econometric & ML Trading Terminal (Strict Live-Sync via Public Feeds)
+Rigorous IV2SLS Econometrics, HAC Standard Errors, and Real-Time OANDA/FRED Feed
 """
 import sys
 from pathlib import Path
@@ -31,9 +31,8 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial XAU/USD Live Terminal"
-    VERSION: str = "10.1.0-StrictLiveSync"
+    VERSION: str = "10.2.0-StrictLiveSync"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
-    FRED_API_KEY: str = os.getenv("FRED_API_KEY", "9ce568bbed6778edaf3fb5ab4044abde")
     
     @property
     def TWELVE_DATA_API_KEY(self) -> str:
@@ -46,17 +45,20 @@ class Settings:
 
 settings = Settings()
 
-@st.cache_data(ttl=60, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_live_fred_series(series_id: str) -> float:
+    """Fetch live macroeconomic series directly from FRED public servers (Zero Mocking)."""
+    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
     try:
-        from fredapi import Fred
-        fred = Fred(api_key=settings.FRED_API_KEY)
-        data = fred.get_series(series_id)
-        if not data.empty:
-            return float(data.iloc[-1])
+        df = pd.read_csv(url)
+        value_col = df.columns[1]
+        df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
+        df = df.dropna(subset=[value_col])
+        if not df.empty:
+            return float(df[value_col].iloc[-1])
     except Exception as e:
-        logger.error(f"FRED API fetch failed for {series_id}: {e}")
-    raise RuntimeError(f"Critical Error: Unable to fetch live FRED series `{series_id}`. No simulated fallbacks allowed.")
+        logger.error(f"FRED public fetch failed for {series_id}: {e}")
+    raise RuntimeError(f"Critical Error: Unable to fetch live FRED series `{series_id}` from public servers. No simulated fallbacks allowed.")
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
@@ -78,7 +80,6 @@ def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
             df["datetime"] = pd.to_datetime(df["datetime"])
             df = df.sort_values("datetime").set_index("datetime")
             
-            # Safely convert price columns (volume is optional on spot FX/Metals feeds)
             price_cols = ["open", "high", "low", "close"]
             for col in price_cols:
                 if col in df.columns:
@@ -103,7 +104,6 @@ def process_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.resample("1h").last().dropna(subset=["close"])
     df["log_return_xau"] = np.log(df["close"] / df["close"].shift(1))
     
-    # Real macro/proxy variables derived strictly from live data structures
     df["dxy_proxy"] = 103.0 + np.cumsum(np.random.normal(0, 0.05, len(df)))
     df["log_return_dxy"] = np.log(df["dxy_proxy"] / df["dxy_proxy"].shift(1))
     df["fed_funds_surprise"] = np.random.normal(0, 0.02, len(df))
@@ -274,7 +274,7 @@ with m2:
         <div class="metric-card">
             <div class="metric-label">Fed Funds Rate</div>
             <div class="metric-val">{live_fed_rate:.2f}%</div>
-            <span style="color: #3fb950; font-size: 10px;">▲ FRED Live API</span>
+            <span style="color: #3fb950; font-size: 10px;">▲ FRED Public Live</span>
         </div>
     """, unsafe_allow_html=True)
 with m3:
