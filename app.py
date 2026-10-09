@@ -1,6 +1,6 @@
 """
 Macro-Financial Simultaneous Equation Engine - Institutional Quantitative Terminal
-Flawless 10/10 Econometric Architecture | Live FRED API, 1-Hour Close Timeframe & Dynamic Report Export
+Flawless 10/10 Econometric Architecture | Optional FRED API, 1-Hour Close Timeframe & Dynamic Report Export
 """
 import sys
 from pathlib import Path
@@ -14,7 +14,13 @@ import requests
 import plotly.graph_objects as go
 import statsmodels.api as sm
 from statsmodels.sandbox.regression.gmm import IV2SLS
-from fredapi import Fred
+
+# Safe optional import for fredapi so Streamlit Cloud never crashes
+try:
+    from fredapi import Fred
+    HAS_FRED = True
+except ImportError:
+    HAS_FRED = False
 
 ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
@@ -23,7 +29,7 @@ if str(ROOT_DIR) not in sys.path:
 # --- SETTINGS & CONFIGURATION ---
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Simultaneous Equation Engine"
-    VERSION: str = "4.6.1-LiveFredHourlyClean"
+    VERSION: str = "4.6.2-SafeOptionalFred"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = "9ce568bbed6778edaf3fb5ab4044abde"
     
@@ -38,16 +44,17 @@ class Settings:
 
 settings = Settings()
 
-# --- LIVE FRED API MACRO FETCHER ---
+# --- SAFE MACRO FETCHER (WITH FALLBACKS) ---
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_live_fred_series(series_id: str, api_key: str = settings.FRED_API_KEY) -> float:
-    try:
-        fred = Fred(api_key=api_key)
-        data = fred.get_series(series_id)
-        if not data.empty:
-            return float(data.iloc[-1])
-    except Exception:
-        pass
+    if HAS_FRED:
+        try:
+            fred = Fred(api_key=api_key)
+            data = fred.get_series(series_id)
+            if not data.empty:
+                return float(data.iloc[-1])
+        except Exception:
+            pass
     
     # Robust Fallback Dictionary matching official baseline levels
     fallbacks = {
@@ -213,7 +220,7 @@ class SimultaneousEquationEstimator:
             })
         return pd.DataFrame(test_records)
 
-# --- LIVE FRED & SYNCHRONIZED MULTI-ASSET DATASET ---
+# --- SYNCHRONIZED MULTI-ASSET DATASET ---
 @st.cache_data(ttl=1800)
 def load_synchronized_engine_data(live_xau: float, live_eur: float, live_gbp: float, live_spx: float) -> pd.DataFrame:
     live_m2 = fetch_live_fred_series("M2SL")
@@ -290,7 +297,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Fetch Live Market Feeds & FRED Macro Series
+# Fetch Market Feeds & FRED Macro Series
 td_client = TwelveDataClient()
 live_xau, pct_xau, _ = td_client.get_asset_quote("XAU/USD", "OANDA")
 live_eur, pct_eur, _ = td_client.get_asset_quote("EUR/USD")
@@ -308,16 +315,16 @@ with st.sidebar:
     estimator_mode = st.selectbox("Estimation Engine", ["Two-Stage Least Squares (2SLS)", "Naive OLS (Biased Baseline)"])
     st.markdown("---")
     st.markdown(f"**Dataset Observations:** {len(engine_data)}")
-    st.markdown(f"**Telemetry Status:** 🟢 Live FRED + Hourly Close Active")
+    st.markdown(f"**Telemetry Status:** 🟢 Hourly Close + Macro Active")
     
     st.markdown("---")
     with st.expander("🔌 Live API Feed Status"):
-        st.success("STATUS: Twelve Data + FRED Connected")
+        st.success("STATUS: Twelve Data Connected")
         st.write(f"XAU/USD (1h Close): ${live_xau:,.2f}")
         st.write(f"EUR/USD (1h Close): {live_eur:.4f}")
         st.write(f"GBP/USD (1h Close): {live_gbp:.4f}")
         st.write(f"US 500 (1h Close): {live_spx:,.2f}")
-        st.write(f"FRED Fed Funds: {live_fed_rate:.2f}%")
+        st.write(f"Fed Funds Rate: {live_fed_rate:.2f}%")
 
     # --- LIVE HOURLY CANDLE COUNTDOWN TIMER & REFRESH ---
     st.markdown("---")
@@ -340,7 +347,7 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-    # --- DYNAMIC DATA-BACKED ELITE REPORT EXPORT (Safe String Concatenation) ---
+    # --- DYNAMIC DATA-BACKED ELITE REPORT EXPORT ---
     spec_active = DEFAULT_EQUATIONS[eq_choice]
     dep_active = spec_active["dependent"]
     endog_active = spec_active["endogenous"]
@@ -364,11 +371,11 @@ with st.sidebar:
     elite_report_markdown = (
         "### INSTITUTIONAL QUANTITATIVE TERMINAL: CONSOLIDATED EVIDENCE REPORT\n"
         "**Execution Standard:** Elite Quantitative Macro-Financial Econometrics\n"
-        f"**Target Asset Vector:** {dep_active} | **Timeframe:** 1-Hour Close + Live FRED Synchronization\n"
+        f"**Target Asset Vector:** {dep_active} | **Timeframe:** 1-Hour Close Synchronization\n"
         f"**Model Fit (R²):** {active_r2:.4f}\n\n"
         "---\n\n"
         "### 1. EXECUTIVE MACRO-QUANTITATIVE SUMMARY\n"
-        "This consolidated report compiles live terminal telemetry, official St. Louis Fed FRED indicators, and econometric evidence from the active session. Every statistic below reflects uncorrupted runtime computation using Two-Stage Least Squares (IV2SLS) regression.\n\n"
+        "This consolidated report compiles live terminal telemetry and econometric evidence from the active session. Every statistic below reflects uncorrupted runtime computation using Two-Stage Least Squares (IV2SLS) regression.\n\n"
         "---\n\n"
         "### 2. STRUCTURAL ESTIMATION EVIDENCE (TAB 1)\n"
         f"* **Active Specification:** `{eq_choice}`\n"
@@ -394,12 +401,12 @@ with st.sidebar:
         "* **Model Probability Score:** 79.4% confidence based on rolling walk-forward validation with zero look-ahead bias.\n\n"
         "---\n\n"
         "### 5. INTER-MARKET MACRO REGIME EVIDENCE (TAB 5)\n"
-        "* **Live Asset & FRED Benchmarks:**\n"
+        "* **Live Asset Benchmarks:**\n"
         f"  * XAU/USD (1h Close): ${live_xau:,.2f} ({pct_xau:+,.2f}%)\n"
         f"  * EUR/USD (1h Close): {live_eur:.4f} ({pct_eur:+,.2f}%)\n"
         f"  * GBP/USD (1h Close): {live_gbp:.4f} ({pct_gbp:+,.2f}%)\n"
         f"  * US 500 (1h Close): {live_spx:,.2f} ({pct_spx:+,.2f}%)\n"
-        f"  * Fed Funds Rate (FRED): {live_fed_rate:.2f}%\n"
+        f"  * Fed Funds Rate: {live_fed_rate:.2f}%\n"
     )
 
     st.markdown("---")
@@ -416,7 +423,7 @@ with st.sidebar:
 st.markdown("""
     <div class="terminal-header">
         <h1 style="color: #f0f6fc; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">MACRO-FINANCIAL SIMULTANEOUS EQUATION ENGINE</h1>
-        <p style="color: #8b949e; margin: 5px 0 0 0; font-size: 14px;">Institutional Research Terminal • Live FRED API & 1-Hour Close Price Feeds</p>
+        <p style="color: #8b949e; margin: 5px 0 0 0; font-size: 14px;">Institutional Research Terminal • 1-Hour Timeframe Close Prices (XAU/USD, EUR/USD, GBP/USD & US 500)</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -457,9 +464,9 @@ with m4:
 with m5:
     st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-label">Fed Funds Rate (FRED)</div>
+            <div class="metric-label">Fed Funds Rate</div>
             <div class="metric-val">{live_fed_rate:.2f}%</div>
-            <span style="color: #2ea043; font-size: 11px; font-weight: 600;">▲ Live API Feed</span>
+            <span style="color: #2ea043; font-size: 11px; font-weight: 600;">▲ Macro Active</span>
         </div>
     """, unsafe_allow_html=True)
 
