@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Econometric & ML Terminal"
-    VERSION: str = "8.1.0-PublicationQuality"
+    VERSION: str = "8.2.0-PublicationQuality"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "9ce568bbed6778edaf3fb5ab4044abde")
     
@@ -46,8 +46,9 @@ class Settings:
 
 settings = Settings()
 
+@st.cache_data(ttl=1800, show_spinner=False)
 def load_data(symbol: str = "XAU/USD") -> tuple[pd.DataFrame, bool]:
-    """Load high-frequency market data with resilient offline fallback."""
+    """Load high-frequency market data from Twelve Data with resilient offline fallback."""
     url = f"{settings.TWELVE_DATA_BASE_URL}/time_series"
     params = {
         "symbol": symbol,
@@ -216,7 +217,7 @@ def write_report(est_res: dict, diag_res: dict) -> str:
 - Standard errors corrected for autocorrelation and heteroskedasticity via Newey-West HAC (maxlags=4).
 """
 
-# --- STREAMLIT UI ---
+# --- STREAMLIT UI SETUP ---
 st.set_page_config(page_title="Econometric & ML Trading Terminal", page_icon="⚡", layout="wide")
 
 st.markdown("""
@@ -235,6 +236,8 @@ st.markdown("""
 
 try:
     df_raw, is_fallback = load_data("XAU/USD")
+    if is_fallback:
+        st.toast("Using resilient offline fallback feed (Twelve Data API rate-limited or unreachable).", icon="⚠️")
     df_clean = transform(df_raw)
     econ_engine = EconometricEngine(df_clean)
 except Exception as e:
