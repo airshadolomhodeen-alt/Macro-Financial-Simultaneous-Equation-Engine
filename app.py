@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Econometric & ML Terminal"
-    VERSION: str = "7.1.0-ResilientEngine"
+    VERSION: str = "7.2.0-ResilientEngine"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "9ce568bbed6778edaf3fb5ab4044abde")
     
@@ -46,7 +46,7 @@ class Settings:
 settings = Settings()
 
 @st.cache_data(ttl=1800, show_spinner=False)
-def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
+def load_and_align_data(symbol: str = "XAU/USD") -> tuple[pd.DataFrame, bool]:
     """Fetches high-frequency market data from Twelve Data with a robust fallback mechanism."""
     url = f"{settings.TWELVE_DATA_BASE_URL}/time_series"
     params = {
@@ -67,7 +67,7 @@ def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
             
             logger.info(f"Successfully fetched live data for {symbol} from Twelve Data.")
-            return process_features(df)
+            return process_features(df), False
     except Exception as e:
         logger.warning(f"Live API connection failed: {e}. Falling back to high-fidelity simulation engine.")
 
@@ -83,8 +83,7 @@ def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
         "volume": np.random.randint(1000, 5000, len(date_range))
     }, index=date_range)
     
-    st.toast("Using resilient offline fallback feed (API rate-limited or unreachable).", icon="⚠️")
-    return process_features(df_fallback)
+    return process_features(df_fallback), True
 
 def process_features(df: pd.DataFrame) -> pd.DataFrame:
     """Frequency alignment & feature engineering for ML & Econometrics."""
@@ -95,7 +94,6 @@ def process_features(df: pd.DataFrame) -> pd.DataFrame:
     df["fed_funds_surprise"] = np.random.normal(0, 0.02, len(df))
     df["instrument_z"] = np.random.normal(0, 1.0, len(df))
     
-    # ML Feature Engineering matching training script specs
     df["start"] = df["open"]
     df["stop"] = df["close"].shift(1)
     rolling_std = df["close"].rolling(window=14).std().bfill()
@@ -209,7 +207,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 try:
-    df_data = load_and_align_data("XAU/USD")
+    df_data, is_fallback = load_and_align_data("XAU/USD")
+    if is_fallback:
+        st.toast("Using resilient offline fallback feed (Twelve Data API rate-limited or unreachable).", icon="⚠️")
     econometric_engine = EconometricEngine(df_data)
 except Exception as e:
     st.error(f"Initialization Error: {e}")
@@ -235,7 +235,7 @@ with tab_econ:
             st.warning("Please select at least one endogenous regressor and one instrument.")
         else:
             res = econometric_engine.estimate_iv_2sls(dep_var, endog_vars, exog_vars, instruments)
-            st.dataframe(res["table"].round(4), use_container_width=True, hide_Index=True)
+            st.dataframe(res["table"].round(4), use_container_width=True, hide_index=True)
             
             m1, m2, m3 = st.columns(3)
             with m1:
