@@ -1,12 +1,12 @@
 """
 Macro-Financial Simultaneous Equation Engine - Institutional Quantitative Terminal
-Flawless 10/10 Econometric Architecture | Self-Contained 2SLS Engine, Live Feeds & Report Export
+Flawless 10/10 Econometric Architecture | Self-Contained 2SLS, PST Timer, Live Feeds & Report Export
 """
 import sys
 from pathlib import Path
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -21,7 +21,7 @@ if str(ROOT_DIR) not in sys.path:
 # --- SETTINGS & CONFIGURATION ---
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Simultaneous Equation Engine"
-    VERSION: str = "4.6.4-PerfectScatter"
+    VERSION: str = "4.6.5-PST-CustomFX"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = "9ce568bbed6778edaf3fb5ab4044abde"
     
@@ -139,6 +139,7 @@ DEFAULT_EQUATIONS = {
         "description": "Explains EUR/USD spot dynamics through gold arbitrage, interest rate differentials, and trade balances."
     }
 }
+
 # --- ROBUST SELF-CONTAINED 2SLS ECONOMETRIC ENGINE ---
 class SimultaneousEquationEstimator:
     def __init__(self, data: pd.DataFrame):
@@ -330,20 +331,22 @@ with st.sidebar:
         st.write(f"US 500 (1h Close): {live_spx:,.2f}")
         st.write(f"Fed Funds Rate: {live_fed_rate:.2f}%")
 
-    # --- LIVE HOURLY CANDLE COUNTDOWN TIMER & REFRESH ---
+    # --- LIVE HOURLY CANDLE COUNTDOWN TIMER (Philippine Standard Time UTC+8) ---
     st.markdown("---")
-    st.markdown("### ⏱️ Hourly Candle Sync Timer")
-    now = datetime.now()
-    next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-    remaining_seconds = int((next_hour - now).total_seconds())
-    mins_left = remaining_seconds // 60
-    secs_left = remaining_seconds % 60
+    st.markdown("### ⏱️ Hourly Candle Sync Timer (PST)")
+    
+    PH_TIMEZONE = timezone(timedelta(hours=8))
+    now_ph = datetime.now(PH_TIMEZONE)
+    next_hour = (now_ph + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    remaining_seconds = int((next_hour - now_ph).total_seconds())
+    mins_left = max(0, remaining_seconds // 60)
+    secs_left = max(0, remaining_seconds % 60)
     
     st.markdown(f"""
         <div style="background-color: #161b22; border: 1px solid #30363d; padding: 12px; border-radius: 6px; text-align: center;">
-            <div style="color: #8b949e; font-size: 10px; font-weight: 700; text-transform: uppercase;">Next 1h Close In</div>
+            <div style="color: #8b949e; font-size: 10px; font-weight: 700; text-transform: uppercase;">Next 1h Close In (PST)</div>
             <div style="color: #58a6ff; font-size: 20px; font-weight: 800; margin-top: 4px;">{mins_left:02d}:{secs_left:02d}</div>
-            <div style="color: #8b949e; font-size: 9px; margin-top: 4px;">Last Sync: {now.strftime('%H:%M:%S')}</div>
+            <div style="color: #8b949e; font-size: 9px; margin-top: 4px;">Last Sync: {now_ph.strftime('%H:%M:%S')} PST</div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -375,7 +378,7 @@ with st.sidebar:
     elite_report_markdown = (
         "### INSTITUTIONAL QUANTITATIVE TERMINAL: CONSOLIDATED EVIDENCE REPORT\n"
         "**Execution Standard:** Elite Quantitative Macro-Financial Econometrics\n"
-        f"**Target Asset Vector:** {dep_active} | **Timeframe:** 1-Hour Close Synchronization\n"
+        f"**Target Asset Vector:** {dep_active} | **Timeframe:** 1-Hour Close Synchronization (PST)\n"
         f"**Model Fit (R²):** {active_r2:.4f}\n\n"
         "---\n\n"
         "### 1. EXECUTIVE MACRO-QUANTITATIVE SUMMARY\n"
@@ -427,7 +430,7 @@ with st.sidebar:
 st.markdown("""
     <div class="terminal-header">
         <h1 style="color: #f0f6fc; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">MACRO-FINANCIAL SIMULTANEOUS EQUATION ENGINE</h1>
-        <p style="color: #8b949e; margin: 5px 0 0 0; font-size: 14px;">Institutional Research Terminal • 1-Hour Timeframe Close Prices (XAU/USD, EUR/USD, GBP/USD & US 500)</p>
+        <p style="color: #8b949e; margin: 5px 0 0 0; font-size: 14px;">Institutional Research Terminal • 1-Hour Timeframe Close Prices (Philippine Standard Time UTC+8)</p>
     </div>
 """, unsafe_allow_html=True)
 
