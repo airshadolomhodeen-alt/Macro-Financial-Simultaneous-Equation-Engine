@@ -1,6 +1,5 @@
 """
 Macro-Financial Simultaneous Equation Engine - Institutional Quantitative Terminal
-Flawless 10/10 Econometric Architecture | Real-Time XAU/USD, EUR/USD, GBP/USD & US 500 Integration
 """
 import sys
 from pathlib import Path
