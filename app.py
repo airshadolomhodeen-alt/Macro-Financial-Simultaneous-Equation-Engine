@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Econometric & ML Terminal"
-    VERSION: str = "7.3.0-ResilientEngine"
+    VERSION: str = "7.4.0-ResilientEngine"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "9ce568bbed6778edaf3fb5ab4044abde")
     
@@ -129,10 +129,8 @@ class EconometricEngine:
         X_exog = self.data[exog_vars] if exog_vars else None
         Z_inst = self.data[instruments]
         
-        # First-stage instrument matrix
         inst_full = sm.add_constant(pd.concat([X_exog, Z_inst], axis=1) if X_exog is not None else Z_inst)
         
-        # First-stage regressions & fitted values
         X_hat = np.empty_like(X_endog)
         fs_results = {}
         for i, col in enumerate(endog_vars):
@@ -145,15 +143,13 @@ class EconometricEngine:
                 "p_value": round(float(f_stat.pvalue), 4)
             }
             
-        # Second-stage design matrix
         X_second_df = pd.DataFrame(X_hat, columns=endog_vars, index=self.data.index)
         if X_exog is not None:
             for col in exog_vars:
                 X_second_df[col] = self.data[col]
         X_second = sm.add_constant(X_second_df)
         
-        # Second-stage regression with Newey-West HAC standard errors
-        second_fit = sm.OLS(Y, X_second).fit(cov_type="HAC", maxlags=4)
+        second_fit = sm.OLS(Y, X_second).fit(cov_type="HAC", cov_kwds={"maxlags": 4})
         
         results_df = pd.DataFrame({
             "Parameter": second_fit.params.index,
@@ -197,7 +193,6 @@ def train_ml_models(df: pd.DataFrame):
     tree_acc = accuracy_score(y_test_per, decision_tree_model.predict(X_test_per))
     return res_acc, tree_acc
 
-# --- STREAMLIT UI SETUP ---
 st.set_page_config(page_title="Econometric & ML Trading Terminal", page_icon="⚡", layout="wide")
 
 st.markdown("""
@@ -224,7 +219,6 @@ except Exception as e:
     st.error(f"Initialization Error: {e}")
     st.stop()
 
-# --- TABS FOR WORKFLOW ---
 tab_econ, tab_ml = st.tabs(["📊 Rigorous Econometrics (IV2SLS)", "🤖 ML Classifiers & Inference"])
 
 with tab_econ:
