@@ -21,7 +21,7 @@ if str(ROOT_DIR) not in sys.path:
 # --- SETTINGS & CONFIGURATION ---
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Simultaneous Equation Engine"
-    VERSION: str = "4.6.3-SelfContained2SLS"
+    VERSION: str = "4.6.4-PerfectScatter"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = "9ce568bbed6778edaf3fb5ab4044abde"
     
@@ -158,14 +158,12 @@ class SimultaneousEquationEstimator:
         X_exog = self.data[exogenous_vars].values if exogenous_vars else np.empty((len(self.data), 0))
         Z_inst = self.data[instruments].values
         
-        # First Stage: Regress endogenous variables on exogenous + instruments
         Z_full = sm.add_constant(np.hstack([X_exog, Z_inst]))
         X_hat = np.empty_like(X_endog)
         for i in range(X_endog.shape[1]):
             fs_fit = sm.OLS(X_endog[:, i], Z_full).fit()
             X_hat[:, i] = fs_fit.fittedvalues
             
-        # Second Stage: Regress Y on X_hat and exogenous variables
         X_second = sm.add_constant(np.hstack([X_hat, X_exog]))
         second_fit = sm.OLS(Y, X_second).fit()
         
@@ -562,13 +560,15 @@ with tab_scatter:
     ols_fit = sm.OLS(y_vals, sm.add_constant(x_vals)).fit()
     ols_preds = ols_fit.predict(sm.add_constant(x_vals))
     
+    # Corrected Multi-Dimensional 2SLS Line Calculation (Holding other covariates at mean)
     iv_res = econometric_engine.estimate_2sls(dep_var, endog_vars, exog_vars, instruments)
     params = iv_res["model_fit"].params
-    intercept = params[0]
-    slope_idx = list(iv_res["table"]["Parameter"]).index(x_reg_name) if x_reg_name in list(iv_res["table"]["Parameter"]) else 1
-    slope = params[slope_idx] if slope_idx < len(params) else 0
-    
-    iv_preds = intercept + slope * x_vals
+    iv_preds = params.iloc[0] if hasattr(params, 'iloc') else params[0]
+    all_regs = endog_vars + exog_vars
+    for i, reg in enumerate(all_regs):
+        reg_vals = x_vals if reg == x_reg_name else engine_data[reg].mean()
+        p_val = params.iloc[i+1] if hasattr(params, 'iloc') else params[i+1]
+        iv_preds = iv_preds + p_val * reg_vals
     
     fig_scatter = go.Figure()
     fig_scatter.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='markers', name='Hourly Synchronized Data', marker=dict(color='#58a6ff', size=7, opacity=0.8)))
