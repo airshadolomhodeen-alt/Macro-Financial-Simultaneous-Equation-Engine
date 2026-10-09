@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial XAU/USD Institutional Terminal"
-    VERSION: str = "10.5.0-ProductionGrade"
+    VERSION: str = "10.6.0-ProductionGrade"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     
     @property
@@ -489,6 +489,6 @@ with tab_forecast:
 with tab_lab:
     st.markdown("### 📈 Live XAU/USD Price Action History")
     fig_multi = go.Figure()
-    fig_multi.add_trigger = fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["close"], mode="lines", name="XAU/USD OANDA Close", line=dict(color="#d4af37", width=2)))
+    fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["close"], mode="lines", name="XAU/USD OANDA Close", line=dict(color="#d4af37", width=2)))
     fig_multi.update_layout(title="XAU/USD Live Spot Price Action", xaxis_title="Date", yaxis_title="Price ($)", template="plotly_dark", height=380, paper_bgcolor="#05070b", plot_bgcolor="#0d1117", margin=dict(l=20, r=20, t=40, b=20))
     st.plotly_chart(fig_multi, use_container_width=True)
