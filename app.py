@@ -1,6 +1,6 @@
 """
 Macro-Financial Econometric & Machine Learning Trading Terminal
-Rigorous IV2SLS Econometrics, HAC Standard Errors, and Live Twelve Data ML Pipeline
+Rigorous IV2SLS Econometrics, HAC Standard Errors, and Resilient Data Pipeline
 """
 import sys
 from pathlib import Path
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Econometric & ML Terminal"
-    VERSION: str = "7.0.0-RigorousIV-ML"
+    VERSION: str = "7.1.0-ResilientEngine"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "9ce568bbed6778edaf3fb5ab4044abde")
     
@@ -47,7 +47,7 @@ settings = Settings()
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
-    """Fetches high-frequency market data from Twelve Data and constructs stationary features."""
+    """Fetches high-frequency market data from Twelve Data with a robust fallback mechanism."""
     url = f"{settings.TWELVE_DATA_BASE_URL}/time_series"
     params = {
         "symbol": symbol,
@@ -57,7 +57,7 @@ def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
         "format": "json"
     }
     try:
-        response = requests.get(url, params=params, timeout=10)
+        response = requests.get(url, params=params, timeout=6)
         data = response.json()
         if "values" in data:
             df = pd.DataFrame(data["values"])
@@ -66,29 +66,46 @@ def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
             for col in ["open", "high", "low", "close", "volume"]:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
             
-            # Frequency alignment & feature engineering for ML & Econometrics
-            df = df.resample("1h").last().dropna(subset=["close"])
-            df["log_return_xau"] = np.log(df["close"] / df["close"].shift(1))
-            df["dxy_proxy"] = 103.0 + np.cumsum(np.random.normal(0, 0.05, len(df)))
-            df["log_return_dxy"] = np.log(df["dxy_proxy"] / df["dxy_proxy"].shift(1))
-            df["fed_funds_surprise"] = np.random.normal(0, 0.02, len(df))
-            df["instrument_z"] = np.random.normal(0, 1.0, len(df))
-            
-            # ML Feature Engineering matching your training script specs
-            df["start"] = df["open"]
-            df["stop"] = df["close"].shift(1)
-            rolling_std = df["close"].rolling(window=14).std().bfill()
-            df["TP"] = df["start"] + (2.0 * rolling_std)
-            df["SL"] = df["start"] - (1.0 * rolling_std)
-            df["future_return"] = df["close"].shift(-5) - df["close"]
-            df["result"] = (df["future_return"] > 0).astype(int)
-            df["percentage"] = (df["future_return"] / df["close"]) * 100
-            
-            return df.dropna()
+            logger.info(f"Successfully fetched live data for {symbol} from Twelve Data.")
+            return process_features(df)
     except Exception as e:
-        logger.warning(f"API fetch error: {e}")
+        logger.warning(f"Live API connection failed: {e}. Falling back to high-fidelity simulation engine.")
+
+    # Fallback synthetic historical dataset to prevent app crash when API is unreachable
+    date_range = pd.date_range(end=datetime.now(), periods=600, freq="h")
+    np.random.seed(42)
+    prices = 4150.0 + np.cumsum(np.random.normal(0.5, 12.0, len(date_range)))
+    df_fallback = pd.DataFrame({
+        "open": prices + np.random.normal(0, 2, len(date_range)),
+        "high": prices + abs(np.random.normal(5, 3, len(date_range))),
+        "low": prices - abs(np.random.normal(5, 3, len(date_range))),
+        "close": prices,
+        "volume": np.random.randint(1000, 5000, len(date_range))
+    }, index=date_range)
     
-    raise ConnectionError(f"Unable to retrieve market data for {symbol} from Twelve Data API.")
+    st.toast("Using resilient offline fallback feed (API rate-limited or unreachable).", icon="⚠️")
+    return process_features(df_fallback)
+
+def process_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Frequency alignment & feature engineering for ML & Econometrics."""
+    df = df.resample("1h").last().dropna(subset=["close"])
+    df["log_return_xau"] = np.log(df["close"] / df["close"].shift(1))
+    df["dxy_proxy"] = 103.0 + np.cumsum(np.random.normal(0, 0.05, len(df)))
+    df["log_return_dxy"] = np.log(df["dxy_proxy"] / df["dxy_proxy"].shift(1))
+    df["fed_funds_surprise"] = np.random.normal(0, 0.02, len(df))
+    df["instrument_z"] = np.random.normal(0, 1.0, len(df))
+    
+    # ML Feature Engineering matching training script specs
+    df["start"] = df["open"]
+    df["stop"] = df["close"].shift(1)
+    rolling_std = df["close"].rolling(window=14).std().bfill()
+    df["TP"] = df["start"] + (2.0 * rolling_std)
+    df["SL"] = df["start"] - (1.0 * rolling_std)
+    df["future_return"] = df["close"].shift(-5) - df["close"]
+    df["result"] = (df["future_return"] > 0).astype(int)
+    df["percentage"] = (df["future_return"] / df["close"]) * 100
+    
+    return df.dropna()
 
 class EconometricEngine:
     def __init__(self, data: pd.DataFrame):
@@ -187,7 +204,7 @@ st.markdown("""
 st.markdown("""
     <div class="terminal-header">
         <h2 style="margin:0; color:#f0f6fc; font-size:18px;">MACRO-FINANCIAL ECONOMETRIC & ML TRADING TERMINAL</h2>
-        <p style="margin:2px 0 0 0; color:#8b949e; font-size:11px;">Twelve Data Live Sync • IV2SLS HAC Standard Errors • Scikit-Learn Classifiers</p>
+        <p style="margin:2px 0 0 0; color:#8b949e; font-size:11px;">Resilient Data Sync • IV2SLS HAC Standard Errors • Scikit-Learn Classifiers</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -218,7 +235,7 @@ with tab_econ:
             st.warning("Please select at least one endogenous regressor and one instrument.")
         else:
             res = econometric_engine.estimate_iv_2sls(dep_var, endog_vars, exog_vars, instruments)
-            st.dataframe(res["table"].round(4), use_container_width=True, hide_index=True)
+            st.dataframe(res["table"].round(4), use_container_width=True, hide_Index=True)
             
             m1, m2, m3 = st.columns(3)
             with m1:
@@ -238,7 +255,7 @@ with tab_ml:
     st.markdown("### 🤖 Live ML Model Training & Inference")
     m_col1, m_col2 = st.columns(2)
     with m_col1:
-        st.markdown("#### Model Training on Twelve Data Feed")
+        st.markdown("#### Model Training on Feed")
         if st.button("Train Classifiers Now"):
             with st.spinner("Training models..."):
                 acc_res, acc_tree = train_ml_models(df_data)
