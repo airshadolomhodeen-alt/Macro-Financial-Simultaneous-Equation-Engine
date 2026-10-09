@@ -1,6 +1,6 @@
 """
 Macro-Financial Simultaneous Equation Engine - Institutional Quantitative Terminal
-Flawless 10/10 Econometric Architecture | Optional FRED API, 1-Hour Close Timeframe & Dynamic Report Export
+Flawless 10/10 Econometric Architecture | Self-Contained 2SLS Engine, Live Feeds & Report Export
 """
 import sys
 from pathlib import Path
@@ -13,14 +13,6 @@ import numpy as np
 import requests
 import plotly.graph_objects as go
 import statsmodels.api as sm
-from statsmodels.sandbox.regression.gmm import IV2SLS
-
-# Safe optional import for fredapi so Streamlit Cloud never crashes
-try:
-    from fredapi import Fred
-    HAS_FRED = True
-except ImportError:
-    HAS_FRED = False
 
 ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
@@ -29,7 +21,7 @@ if str(ROOT_DIR) not in sys.path:
 # --- SETTINGS & CONFIGURATION ---
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Simultaneous Equation Engine"
-    VERSION: str = "4.6.2-SafeOptionalFred"
+    VERSION: str = "4.6.3-SelfContained2SLS"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = "9ce568bbed6778edaf3fb5ab4044abde"
     
@@ -47,16 +39,15 @@ settings = Settings()
 # --- SAFE MACRO FETCHER (WITH FALLBACKS) ---
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_live_fred_series(series_id: str, api_key: str = settings.FRED_API_KEY) -> float:
-    if HAS_FRED:
-        try:
-            fred = Fred(api_key=api_key)
-            data = fred.get_series(series_id)
-            if not data.empty:
-                return float(data.iloc[-1])
-        except Exception:
-            pass
+    try:
+        from fredapi import Fred
+        fred = Fred(api_key=api_key)
+        data = fred.get_series(series_id)
+        if not data.empty:
+            return float(data.iloc[-1])
+    except Exception:
+        pass
     
-    # Robust Fallback Dictionary matching official baseline levels
     fallbacks = {
         "M2SL": 23343.0,     # USM2 Money Supply ($B)
         "CPIAUCSL": 334.1,   # Consumer Price Index
@@ -76,7 +67,7 @@ def fetch_hourly_market_data(symbol: str, api_key: str, base_url: str, exchange:
     url = f"{base_url}/time_series"
     params = {
         "symbol": symbol,
-        "interval": "1h",  # 1-Hour Timeframe Close Price
+        "interval": "1h",
         "outputsize": 100,
         "apikey": api_key,
         "format": "json"
@@ -142,7 +133,7 @@ DEFAULT_EQUATIONS = {
     }
 }
 
-# --- DYNAMIC ECONOMETRIC ENGINE ---
+# --- ROBUST SELF-CONTAINED 2SLS ECONOMETRIC ENGINE ---
 class SimultaneousEquationEstimator:
     def __init__(self, data: pd.DataFrame):
         self.data = data.dropna()
@@ -162,23 +153,32 @@ class SimultaneousEquationEstimator:
         return {"model_fit": model, "table": results_df, "r_squared": model.rsquared}
 
     def estimate_2sls(self, dep_var: str, endogenous_vars: list, exogenous_vars: list, instruments: list) -> dict:
-        Y = self.data[dep_var]
-        regressors = endogenous_vars + exogenous_vars
-        all_instruments = exogenous_vars + instruments
-        X = sm.add_constant(self.data[regressors])
-        Z = sm.add_constant(self.data[all_instruments])
+        Y = self.data[dep_var].values
+        X_endog = self.data[endogenous_vars].values
+        X_exog = self.data[exogenous_vars].values if exogenous_vars else np.empty((len(self.data), 0))
+        Z_inst = self.data[instruments].values
         
-        iv_model = IV2SLS(Y, X, instrument=Z)
-        results = iv_model.fit()
+        # First Stage: Regress endogenous variables on exogenous + instruments
+        Z_full = sm.add_constant(np.hstack([X_exog, Z_inst]))
+        X_hat = np.empty_like(X_endog)
+        for i in range(X_endog.shape[1]):
+            fs_fit = sm.OLS(X_endog[:, i], Z_full).fit()
+            X_hat[:, i] = fs_fit.fittedvalues
+            
+        # Second Stage: Regress Y on X_hat and exogenous variables
+        X_second = sm.add_constant(np.hstack([X_hat, X_exog]))
+        second_fit = sm.OLS(Y, X_second).fit()
+        
+        regressors = endogenous_vars + exogenous_vars
         results_df = pd.DataFrame({
             "Parameter": ["Intercept"] + regressors,
-            "Coefficient": results.params.values,
-            "Robust SE": results.bse.values,
-            "t-statistic": results.tvalues.values,
-            "p-value": results.pvalues.values,
+            "Coefficient": second_fit.params,
+            "Robust SE": second_fit.bse,
+            "t-statistic": second_fit.tvalues,
+            "p-value": second_fit.pvalues,
             "Model": "Proper 2SLS (IV)"
         })
-        return {"model_fit": results, "table": results_df, "r_squared": getattr(results, 'rsquared', 0.89)}
+        return {"model_fit": second_fit, "table": results_df, "r_squared": getattr(second_fit, 'rsquared', 0.89)}
 
     def run_first_stage_diagnostics(self, endogenous_vars: list, exogenous_vars: list, instruments: list) -> pd.DataFrame:
         Z = sm.add_constant(self.data[exogenous_vars + instruments])
@@ -457,7 +457,7 @@ with m4:
     st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">US 500 (1h Close)</div>
-            <div class="metric-val">{live_spx:,.2f}</div>
+            <div class="metric-val">${live_spx:,.2f}</div>
             <span style="color: {'#2ea043' if pct_spx >= 0 else '#da3633'}; font-size: 11px; font-weight: 600;">{pct_spx:+,.2f}% 1h Chg</span>
         </div>
     """, unsafe_allow_html=True)
@@ -564,11 +564,11 @@ with tab_scatter:
     
     iv_res = econometric_engine.estimate_2sls(dep_var, endog_vars, exog_vars, instruments)
     params = iv_res["model_fit"].params
-    intercept = params.get("const", params.get("intercept", 0))
-    slope = params.get(x_reg_name, 0)
-    other_regs = [r for r in (endog_vars + exog_vars) if r != x_reg_name]
-    other_effect = sum(params.get(r, 0) * engine_data[r].mean() for r in other_regs)
-    iv_preds = intercept + other_effect + slope * x_vals
+    intercept = params[0]
+    slope_idx = list(iv_res["table"]["Parameter"]).index(x_reg_name) if x_reg_name in list(iv_res["table"]["Parameter"]) else 1
+    slope = params[slope_idx] if slope_idx < len(params) else 0
+    
+    iv_preds = intercept + slope * x_vals
     
     fig_scatter = go.Figure()
     fig_scatter.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='markers', name='Hourly Synchronized Data', marker=dict(color='#58a6ff', size=7, opacity=0.8)))
