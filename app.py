@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Econometric & ML Terminal"
-    VERSION: str = "8.2.0-PublicationQuality"
+    VERSION: str = "8.3.0-AutoPublicationQuality"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "9ce568bbed6778edaf3fb5ab4044abde")
     
@@ -257,7 +257,8 @@ with tab_econ:
         instruments = st.multiselect("Excluded Instruments", ["instrument_z"], default=["instrument_z"])
     exog_vars = st.multiselect("Exogenous Regressors", ["fed_funds_surprise"], default=["fed_funds_surprise"])
 
-    if st.button("Estimate Model"):
+    # Auto-executes model instantly upon load and selection changes without requiring a button click
+    if endog_vars and instruments:
         res = econ_engine.estimate_model(dep_var, endog_vars, exog_vars, instruments)
         st.dataframe(res["table"].round(4), use_container_width=True, hide_index=True)
         
