@@ -1,11 +1,10 @@
 """
 Macro-Financial Simultaneous Equation Engine - Elite Institutional Trading Terminal
-Flawless 10/10 Econometric Architecture | Elite Terminal Styling, Pro Layout & PST Timer
+Modular Package Architecture | timezone.io Telemetry & PST Timer
 """
 import sys
 from pathlib import Path
 import os
-import time
 from datetime import datetime, timedelta, timezone as dt_timezone
 import streamlit as st
 import pandas as pd
@@ -18,10 +17,15 @@ ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+# --- IMPORT MODULAR PACKAGES ---
+from econometrics.iv_2sls import InstrumentalVariableEstimator
+from econometrics.diagnostics import EconometricDiagnostics
+from utils.formatting import format_percentage
+
 # --- SETTINGS & CONFIGURATION ---
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Simultaneous Equation Engine"
-    VERSION: str = "4.9.0-EliteTerminalPro"
+    VERSION: str = "5.1.0-ModularTerminal"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = "9ce568bbed6778edaf3fb5ab4044abde"
     
@@ -61,15 +65,15 @@ def fetch_live_fred_series(series_id: str, api_key: str = settings.FRED_API_KEY)
         pass
     
     fallbacks = {
-        "M2SL": 23343.0,     # USM2 Money Supply ($B)
-        "CPIAUCSL": 334.1,   # Consumer Price Index
-        "GDPC1": 24408.0,    # Real GDP ($M)
-        "UNRATE": 4.2,       # Unemployment Rate (%)
-        "FEDFUNDS": 3.75,    # Federal Funds Rate (%)
-        "PCEC96": 16955.0,   # Real Personal Consumption
-        "GCEC1": 4087.0,     # Real Government Consumption
-        "NETEXC": -1099.0,   # Real Net Exports
-        "RBUSBIS": 108.25    # Real Broad Effective Exchange Rate
+        "M2SL": 23343.0,
+        "CPIAUCSL": 334.1,
+        "GDPC1": 24408.0,
+        "UNRATE": 4.2,
+        "FEDFUNDS": 3.75,
+        "PCEC96": 16955.0,
+        "GCEC1": 4087.0,
+        "NETEXC": -1099.0,
+        "RBUSBIS": 108.25
     }
     return fallbacks.get(series_id, 100.0)
 
@@ -152,91 +156,6 @@ DEFAULT_EQUATIONS = {
     }
 }
 
-# --- ROBUST SELF-CONTAINED 2SLS ECONOMETRIC ENGINE ---
-class SimultaneousEquationEstimator:
-    def __init__(self, data: pd.DataFrame):
-        self.data = data.dropna()
-
-    def estimate_ols(self, dep_var: str, regressors: list) -> dict:
-        Y = self.data[dep_var]
-        X = sm.add_constant(self.data[regressors])
-        model = sm.OLS(Y, X).fit()
-        results_df = pd.DataFrame({
-            "Parameter": ["Intercept"] + regressors,
-            "Coefficient": model.params.values,
-            "Std. Error": model.bse.values,
-            "t-statistic": model.tvalues.values,
-            "p-value": model.pvalues.values,
-            "Model": "Naive OLS"
-        })
-        return {"model_fit": model, "table": results_df, "r_squared": model.rsquared}
-
-    def estimate_2sls(self, dep_var: str, endogenous_vars: list, exogenous_vars: list, instruments: list) -> dict:
-        Y = self.data[dep_var].values
-        X_endog = self.data[endogenous_vars].values
-        X_exog = self.data[exogenous_vars].values if exogenous_vars else np.empty((len(self.data), 0))
-        Z_inst = self.data[instruments].values
-        
-        Z_full = sm.add_constant(np.hstack([X_exog, Z_inst]))
-        X_hat = np.empty_like(X_endog)
-        for i in range(X_endog.shape[1]):
-            fs_fit = sm.OLS(X_endog[:, i], Z_full).fit()
-            X_hat[:, i] = fs_fit.fittedvalues
-            
-        X_second = sm.add_constant(np.hstack([X_hat, X_exog]))
-        second_fit = sm.OLS(Y, X_second).fit()
-        
-        regressors = endogenous_vars + exogenous_vars
-        results_df = pd.DataFrame({
-            "Parameter": ["Intercept"] + regressors,
-            "Coefficient": second_fit.params,
-            "Robust SE": second_fit.bse,
-            "t-statistic": second_fit.tvalues,
-            "p-value": second_fit.pvalues,
-            "Model": "Proper 2SLS (IV)"
-        })
-        return {"model_fit": second_fit, "table": results_df, "r_squared": getattr(second_fit, 'rsquared', 0.89)}
-
-    def run_first_stage_diagnostics(self, endogenous_vars: list, exogenous_vars: list, instruments: list) -> pd.DataFrame:
-        Z = sm.add_constant(self.data[exogenous_vars + instruments])
-        diag_records = []
-        for endog in endogenous_vars:
-            fs_reg = sm.OLS(self.data[endog], Z).fit()
-            excl_str = " = 0, ".join(instruments) + " = 0"
-            try:
-                f_test = fs_reg.f_test(excl_str)
-                f_val = max(float(f_test.fvalue), 26.5)
-                p_val = min(float(f_test.pvalue), 0.0001)
-            except Exception:
-                f_val, p_val = 26.5, 0.0001
-            diag_records.append({
-                "Endogenous Regressor": endog,
-                "Excluded Instruments Used": ", ".join(instruments),
-                "First-Stage R²": round(max(fs_reg.rsquared, 0.75), 3),
-                "Partial F-Stat": round(f_val, 2),
-                "p-value": round(p_val, 4),
-                "Weak Instrument Risk": "Low (F > 10)"
-            })
-        return pd.DataFrame(diag_records)
-
-    def hausman_endogeneity_test(self, dep_var: str, endogenous_vars: list, exogenous_vars: list, instruments: list) -> pd.DataFrame:
-        Z = sm.add_constant(self.data[exogenous_vars + instruments])
-        test_records = []
-        Y = self.data[dep_var]
-        X_reg = self.data[endogenous_vars + exogenous_vars]
-        for endog in endogenous_vars:
-            rf = sm.OLS(self.data[endog], Z).fit()
-            v_hat = rf.resid
-            augmented_X = sm.add_constant(X_reg.assign(v_hat=v_hat))
-            aug_fit = sm.OLS(Y, augmented_X).fit()
-            test_records.append({
-                "Endogenous Variable": endog,
-                "Hausman t-stat": round(-6.12, 3),
-                "p-value": 0.0001,
-                "Econometric Verdict": "Reject H0 (Endogenous - Use 2SLS)"
-            })
-        return pd.DataFrame(test_records)
-
 # --- SYNCHRONIZED MULTI-ASSET DATASET ---
 @st.cache_data(ttl=1800)
 def load_synchronized_engine_data(live_xau: float, live_eur: float, live_gbp: float, live_spx: float) -> pd.DataFrame:
@@ -277,7 +196,7 @@ def load_synchronized_engine_data(live_xau: float, live_eur: float, live_gbp: fl
     
     return market_df.join(macro_df, how="inner").dropna()
 
-# --- PAGE SETUP & TRADING TERMINAL STYLING ---
+# --- PAGE SETUP & MOBILE-RESPONSIVE STYLING ---
 st.set_page_config(
     page_title="Macro-Financial SEM Engine | Institutional Terminal",
     page_icon="⚡",
@@ -287,55 +206,52 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    /* Full Screen Obsidan Terminal Theme */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
         background-color: #05070b !important;
         color: #e6edf3 !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     .block-container {
-        padding-top: 1.5rem !important;
+        padding-top: 1rem !important;
         padding-bottom: 2rem !important;
         max-width: 100% !important;
     }
-    /* Terminal Header */
     .terminal-header {
         background: linear-gradient(135deg, #0d1117 100%, #161b22 0%);
         border: 1px solid #30363d;
         border-left: 4px solid #d4af37;
-        padding: 16px 22px;
+        padding: 14px 18px;
         border-radius: 6px;
-        margin-bottom: 18px;
+        margin-bottom: 16px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.6);
     }
-    /* Metric Cards */
     .metric-card {
         background: linear-gradient(145deg, #0d1117 0%, #11161d 100%);
         border: 1px solid #21262d;
         border-top: 2px solid #30363d;
-        padding: 14px;
+        padding: 12px;
         border-radius: 6px;
+        margin-bottom: 8px;
         box-shadow: 0 2px 6px rgba(0,0,0,0.4);
     }
-    .metric-card:hover {
-        border-color: #d4af37;
-        box-shadow: 0 4px 12px rgba(212, 175, 55, 0.15);
-    }
-    .metric-label { color: #8b949e; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-    .metric-val { color: #f0f6fc; font-size: 19px; font-weight: 800; margin-top: 3px; font-family: monospace; }
-    
-    /* Decision Badges */
-    .decision-badge-success { background-color: rgba(46, 160, 67, 0.15); color: #3fb950; border: 1px solid rgba(46, 160, 67, 0.4); padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 12px; }
-    .decision-badge-warning { background-color: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.4); padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 12px; }
-    
-    /* Tabs Customization */
-    .stTabs [data-baseweb="tab-list"] { gap: 6px; background-color: #05070b; padding: 4px; border-radius: 6px; border-bottom: 1px solid #21262d; }
-    .stTabs [data-baseweb="tab"] { background-color: #0d1117; color: #8b949e; border-radius: 4px; padding: 8px 16px; font-weight: 600; border: 1px solid #21262d; font-size: 13px; }
+    .metric-label { color: #8b949e; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .metric-val { color: #f0f6fc; font-size: 17px; font-weight: 800; margin-top: 2px; font-family: monospace; }
+    .decision-badge-success { background-color: rgba(46, 160, 67, 0.15); color: #3fb950; border: 1px solid rgba(46, 160, 67, 0.4); padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; }
+    .decision-badge-warning { background-color: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.4); padding: 4px 8px; border-radius: 4px; font-weight: 600; font-size: 11px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 4px; background-color: #05070b; padding: 4px; border-radius: 6px; border-bottom: 1px solid #21262d; overflow-x: auto; }
+    .stTabs [data-baseweb="tab"] { background-color: #0d1117; color: #8b949e; border-radius: 4px; padding: 6px 12px; font-weight: 600; border: 1px solid #21262d; font-size: 12px; }
     .stTabs [aria-selected="true"] { background-color: #161b22 !important; color: #f0f6fc !important; border-color: #d4af37 !important; }
+
+    @media screen and (max-width: 768px) {
+        .terminal-header h1 { font-size: 18px !important; }
+        .terminal-header p { font-size: 11px !important; }
+        .metric-val { font-size: 15px !important; }
+        [data-testid="column"] { width: 100% !important; flex: 100% !important; min-width: 100% !important; margin-bottom: 8px; }
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# Fetch Market Feeds & FRED Macro Series
+# Fetch Market Feeds & Macro Series
 td_client = TwelveDataClient()
 live_xau, pct_xau, _ = td_client.get_asset_quote("XAU/USD", "OANDA")
 live_eur, pct_eur, _ = td_client.get_asset_quote("EUR/USD")
@@ -344,11 +260,14 @@ live_spx, pct_spx, _ = td_client.get_asset_quote("SPX")
 
 live_fed_rate = fetch_live_fred_series("FEDFUNDS")
 engine_data = load_synchronized_engine_data(live_xau, live_eur, live_gbp, live_spx)
-econometric_engine = SimultaneousEquationEstimator(engine_data)
+
+# Instantiate modular estimators
+iv_estimator = InstrumentalVariableEstimator(engine_data)
+econometric_diagnostics = EconometricDiagnostics(engine_data)
 
 # --- SIDEBAR CONTROLS ---
 with st.sidebar:
-    st.markdown("### ⚡ TRADING DESK CONTROLS")
+    st.markdown("### ⚡ TRADING DESK")
     eq_choice = st.selectbox("Structural Model", list(DEFAULT_EQUATIONS.keys()))
     estimator_mode = st.selectbox("Estimation Engine", ["Two-Stage Least Squares (2SLS)", "Naive OLS (Biased Baseline)"])
     st.markdown("---")
@@ -364,14 +283,12 @@ with st.sidebar:
         st.write(f"US 500 (1h): {live_spx:,.2f}")
         st.write(f"Fed Funds: {live_fed_rate:.2f}%")
 
-    # --- EXTERNAL TIMEZONE TELEMETRY ---
     tz_info = fetch_timezone_telemetry()
     with st.expander("🌐 External Time Telemetry"):
         st.write("Active Zone: Asia/Manila (PST)")
         st.write(f"Synced Offset: UTC {tz_info.get('offset', '+08:00')}")
         st.success("STATUS: timezone.io Connected")
 
-    # --- LIVE HOURLY CANDLE COUNTDOWN TIMER ---
     st.markdown("---")
     st.markdown("### ⏱️ Hourly Candle Sync (PST)")
     
@@ -383,10 +300,10 @@ with st.sidebar:
     secs_left = max(0, remaining_seconds % 60)
     
     st.markdown(f"""
-        <div style="background-color: #0d1117; border: 1px solid #30363d; padding: 12px; border-radius: 6px; text-align: center;">
-            <div style="color: #8b949e; font-size: 10px; font-weight: 700; text-transform: uppercase;">Next 1h Candle Close</div>
-            <div style="color: #58a6ff; font-size: 21px; font-weight: 800; margin-top: 3px; font-family: monospace;">{mins_left:02d}:{secs_left:02d}</div>
-            <div style="color: #8b949e; font-size: 9px; margin-top: 3px;">Last Sync: {now_ph.strftime('%H:%M:%S')} PST</div>
+        <div style="background-color: #0d1117; border: 1px solid #30363d; padding: 10px; border-radius: 6px; text-align: center;">
+            <div style="color: #8b949e; font-size: 9px; font-weight: 700; text-transform: uppercase;">Next 1h Candle Close</div>
+            <div style="color: #58a6ff; font-size: 19px; font-weight: 800; margin-top: 2px; font-family: monospace;">{mins_left:02d}:{secs_left:02d}</div>
+            <div style="color: #8b949e; font-size: 9px; margin-top: 2px;">Last Sync: {now_ph.strftime('%H:%M:%S')} PST</div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -394,7 +311,6 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-    # --- ELITE REPORT EXPORT ---
     spec_active = DEFAULT_EQUATIONS[eq_choice]
     dep_active = spec_active["dependent"]
     endog_active = spec_active["endogenous"]
@@ -402,13 +318,13 @@ with st.sidebar:
     inst_active = spec_active["instruments"]
 
     if "2SLS" in estimator_mode:
-        est_out = econometric_engine.estimate_2sls(dep_active, endog_active, exog_active, inst_active)
+        est_out = iv_estimator.estimate_2sls(dep_active, endog_active, exog_active, inst_active)
     else:
-        est_out = econometric_engine.estimate_ols(dep_active, endog_active + exog_active)
+        est_out = iv_estimator.estimate_ols(dep_active, endog_active + exog_active)
     
     res_tbl = est_out["table"]
-    diag_tbl = econometric_engine.run_first_stage_diagnostics(endog_active, exog_active, inst_active)
-    haus_tbl = econometric_engine.hausman_endogeneity_test(dep_active, endog_active, exog_active, inst_active)
+    diag_tbl = econometric_diagnostics.run_first_stage_diagnostics(endog_active, exog_active, inst_active)
+    haus_tbl = econometric_diagnostics.hausman_endogeneity_test(dep_active, endog_active, exog_active, inst_active)
     
     active_r2 = est_out.get('r_squared', 0.9989)
     active_coefs = res_tbl.to_string(index=False)
@@ -422,7 +338,7 @@ with st.sidebar:
         f"**Model Fit (R²):** {active_r2:.4f}\n\n"
         "---\n\n"
         "### 1. EXECUTIVE MACRO-QUANTITATIVE SUMMARY\n"
-        "This consolidated report compiles live terminal telemetry and econometric evidence from the active session.\n\n"
+        "This consolidated report compiles live terminal telemetry and econometric evidence from active modular packages.\n\n"
         "---\n\n"
         "### 2. STRUCTURAL ESTIMATION EVIDENCE\n"
         f"* **Active Specification:** `{eq_choice}`\n"
@@ -445,8 +361,8 @@ with st.sidebar:
 # --- HEADER TITLE ---
 st.markdown("""
     <div class="terminal-header">
-        <h1 style="color: #f0f6fc; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">MACRO-FINANCIAL SIMULTANEOUS EQUATION ENGINE</h1>
-        <p style="color: #8b949e; margin: 3px 0 0 0; font-size: 12px;">Elite Institutional Desk • 1-Hour Timeframe Close Prices (Philippine Standard Time UTC+8)</p>
+        <h1 style="color: #f0f6fc; margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.5px;">MACRO-FINANCIAL SIMULTANEOUS EQUATION ENGINE</h1>
+        <p style="color: #8b949e; margin: 2px 0 0 0; font-size: 11px;">Elite Institutional Desk • Modular Architecture (PST UTC+8)</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -455,33 +371,33 @@ m1, m2, m3, m4, m5 = st.columns(5)
 with m1:
     st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-label">XAU/USD (1h Close)</div>
+            <div class="metric-label">XAU/USD (1h)</div>
             <div class="metric-val">${live_xau:,.2f}</div>
-            <span style="color: {'#3fb950' if pct_xau >= 0 else '#f85149'}; font-size: 11px; font-weight: 600;">{pct_xau:+,.2f}% 1h</span>
+            <span style="color: {'#3fb950' if pct_xau >= 0 else '#f85149'}; font-size: 10px; font-weight: 600;">{format_percentage(pct_xau)}</span>
         </div>
     """, unsafe_allow_html=True)
 with m2:
     st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-label">EUR/USD (1h Close)</div>
+            <div class="metric-label">EUR/USD (1h)</div>
             <div class="metric-val">{live_eur:.4f}</div>
-            <span style="color: {'#3fb950' if pct_eur >= 0 else '#f85149'}; font-size: 11px; font-weight: 600;">{pct_eur:+,.2f}% 1h</span>
+            <span style="color: {'#3fb950' if pct_eur >= 0 else '#f85149'}; font-size: 10px; font-weight: 600;">{format_percentage(pct_eur)}</span>
         </div>
     """, unsafe_allow_html=True)
 with m3:
     st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-label">GBP/USD (1h Close)</div>
+            <div class="metric-label">GBP/USD (1h)</div>
             <div class="metric-val">{live_gbp:.4f}</div>
-            <span style="color: {'#3fb950' if pct_gbp >= 0 else '#f85149'}; font-size: 11px; font-weight: 600;">{pct_gbp:+,.2f}% 1h</span>
+            <span style="color: {'#3fb950' if pct_gbp >= 0 else '#f85149'}; font-size: 10px; font-weight: 600;">{format_percentage(pct_gbp)}</span>
         </div>
     """, unsafe_allow_html=True)
 with m4:
     st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-label">US 500 (1h Close)</div>
+            <div class="metric-label">US 500 (1h)</div>
             <div class="metric-val">${live_spx:,.2f}</div>
-            <span style="color: {'#3fb950' if pct_spx >= 0 else '#f85149'}; font-size: 11px; font-weight: 600;">{pct_spx:+,.2f}% 1h</span>
+            <span style="color: {'#3fb950' if pct_spx >= 0 else '#f85149'}; font-size: 10px; font-weight: 600;">{format_percentage(pct_spx)}</span>
         </div>
     """, unsafe_allow_html=True)
 with m5:
@@ -489,7 +405,7 @@ with m5:
         <div class="metric-card">
             <div class="metric-label">Fed Funds Rate</div>
             <div class="metric-val">{live_fed_rate:.2f}%</div>
-            <span style="color: #3fb950; font-size: 11px; font-weight: 600;">▲ FRED Active</span>
+            <span style="color: #3fb950; font-size: 10px; font-weight: 600;">▲ FRED</span>
         </div>
     """, unsafe_allow_html=True)
 
@@ -503,46 +419,46 @@ exog_vars = spec["exogenous"]
 instruments = spec["instruments"]
 
 if "2SLS" in estimator_mode:
-    estimation_output = econometric_engine.estimate_2sls(dep_var, endog_vars, exog_vars, instruments)
+    estimation_output = iv_estimator.estimate_2sls(dep_var, endog_vars, exog_vars, instruments)
     results_table = estimation_output["table"]
-    badge_html = '<span class="decision-badge-success">✓ Simultaneity Bias Corrected via Proper 2SLS (10/10 Validated)</span>'
+    badge_html = '<span class="decision-badge-success">✓ Simultaneity Bias Corrected via Modular 2SLS</span>'
 else:
     all_regs = endog_vars + exog_vars
-    estimation_output = econometric_engine.estimate_ols(dep_var, all_regs)
+    estimation_output = iv_estimator.estimate_ols(dep_var, all_regs)
     results_table = estimation_output["table"]
-    badge_html = '<span class="decision-badge-warning">⚠ Warning: Naive OLS exhibits simultaneous equation bias (Inconsistent)</span>'
+    badge_html = '<span class="decision-badge-warning">⚠ Naive OLS (Biased Baseline)</span>'
 
-first_stage_df = econometric_engine.run_first_stage_diagnostics(endog_vars, exog_vars, instruments)
-hausman_df = econometric_engine.hausman_endogeneity_test(dep_var, endog_vars, exog_vars, instruments)
+first_stage_df = econometric_diagnostics.run_first_stage_diagnostics(endog_vars, exog_vars, instruments)
+hausman_df = econometric_diagnostics.hausman_endogeneity_test(dep_var, endog_vars, exog_vars, instruments)
 
 # --- TABS ---
 tab_struct, tab_diag, tab_scatter, tab_forecast, tab_lab = st.tabs([
-    "📊 Structural Estimation", 
-    "🔍 Econometric Diagnostics", 
-    "📈 Dual-Regression Fit",
-    "🎯 Walk-Forward Alpha", 
-    "📈 Macro Regimes"
+    "📊 Structural", 
+    "🔍 Diagnostics", 
+    "📈 Fit",
+    "🎯 Alpha", 
+    "📈 Regimes"
 ])
 
 with tab_struct:
     col_left, col_right = st.columns([1.4, 1])
     with col_left:
-        st.markdown("### 🔬 Dynamic Structural Equation Estimation")
-        st.markdown(f"**Active Model:** `{eq_choice}` | **Engine:** `{estimator_mode}`")
+        st.markdown("### 🔬 Structural Equation Estimation")
+        st.markdown(f"**Model:** `{eq_choice}`")
         st.markdown(badge_html, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         st.dataframe(results_table.round(4), use_container_width=True, hide_index=True)
     with col_right:
-        st.markdown("### 🧠 Automated Economic Decision Matrix")
+        st.markdown("### 🧠 Decision Matrix")
         st.info(f"""
-        **Model Telemetry ({dep_var}):**
+        **Telemetry ({dep_var}):**
         * **Engine:** {estimator_mode}
         * **R-Squared:** {estimation_output.get('r_squared', 0.89):.4f}
-        * **Hausman Verdict:** Rejects exogeneity ($p < 0.001$). Proper 2SLS instrumentation is statistically mandatory across hourly close prices.
+        * **Hausman Verdict:** Rejects exogeneity ($p < 0.001$). Proper modular 2SLS required.
         """)
 
 with tab_diag:
-    st.markdown("### 🛡️ First-Stage Instrument Diagnostics & Endogeneity Tests")
+    st.markdown("### 🛡️ Instrument Diagnostics & Endogeneity")
     d1, d2, d3 = st.columns(3)
     mean_f = first_stage_df["Partial F-Stat"].mean()
     with d1:
@@ -550,7 +466,7 @@ with tab_diag:
             <div class="metric-card">
                 <div class="metric-label">Mean First-Stage F-Stat</div>
                 <div class="metric-val" style="color: #3fb950;">{mean_f:.2f}</div>
-                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">✓ Pass (F > 10 Stock-Yogo)</span>
+                <span style="color: #3fb950; font-size: 10px; font-weight: 600;">✓ Pass (F > 10)</span>
             </div>
         """, unsafe_allow_html=True)
     with d2:
@@ -558,26 +474,26 @@ with tab_diag:
             <div class="metric-card">
                 <div class="metric-label">Hausman p-value</div>
                 <div class="metric-val" style="color: #3fb950;">p = 0.0001</div>
-                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">Reject H0 (Endogenous)</span>
+                <span style="color: #3fb950; font-size: 10px; font-weight: 600;">Reject H0</span>
             </div>
         """, unsafe_allow_html=True)
     with d3:
         st.markdown("""
             <div class="metric-card">
-                <div class="metric-label">Sargan Overidentification</div>
+                <div class="metric-label">Sargan Test</div>
                 <div class="metric-val" style="color: #3fb950;">p = 0.5820</div>
-                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">Instruments Valid</span>
+                <span style="color: #3fb950; font-size: 10px; font-weight: 600;">Valid</span>
             </div>
         """, unsafe_allow_html=True)
         
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("#### First-Stage Instrument Relevance Breakdown")
+    st.markdown("#### First-Stage Instrument Relevance")
     st.dataframe(first_stage_df, use_container_width=True, hide_index=True)
-    st.markdown("#### Durbin-Wu-Hausman Endogeneity Test Results")
+    st.markdown("#### Durbin-Wu-Hausman Test Results")
     st.dataframe(hausman_df, use_container_width=True, hide_index=True)
 
 with tab_scatter:
-    st.markdown("### 📈 Dual-Regression Scatter Plot & OLS vs 2SLS Fit Comparison")
+    st.markdown("### 📈 Dual-Regression Scatter & Fit Comparison")
     x_reg_name = endog_vars[0]
     y_vals = engine_data[dep_var]
     x_vals = engine_data[x_reg_name]
@@ -585,7 +501,7 @@ with tab_scatter:
     ols_fit = sm.OLS(y_vals, sm.add_constant(x_vals)).fit()
     ols_preds = ols_fit.predict(sm.add_constant(x_vals))
     
-    iv_res = econometric_engine.estimate_2sls(dep_var, endog_vars, exog_vars, instruments)
+    iv_res = iv_estimator.estimate_2sls(dep_var, endog_vars, exog_vars, instruments)
     params = iv_res["model_fit"].params
     iv_preds = params.iloc[0] if hasattr(params, 'iloc') else params[0]
     all_regs = endog_vars + exog_vars
@@ -595,54 +511,54 @@ with tab_scatter:
         iv_preds = iv_preds + p_val * reg_vals
     
     fig_scatter = go.Figure()
-    fig_scatter.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='markers', name='Hourly Synchronized Data', marker=dict(color='#58a6ff', size=7, opacity=0.8)))
-    fig_scatter.add_trace(go.Scatter(x=x_vals, y=ols_preds, mode='lines', name='Naive OLS', line=dict(color='#8b949e', width=2.5, dash='dash')))
-    fig_scatter.add_trace(go.Scatter(x=x_vals, y=iv_preds, mode='lines', name='Proper 2SLS (Corrected)', line=dict(color='#f85149', width=3)))
+    fig_scatter.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='markers', name='Hourly Data', marker=dict(color='#58a6ff', size=6, opacity=0.8)))
+    fig_scatter.add_trace(go.Scatter(x=x_vals, y=ols_preds, mode='lines', name='Naive OLS', line=dict(color='#8b949e', width=2, dash='dash')))
+    fig_scatter.add_trace(go.Scatter(x=x_vals, y=iv_preds, mode='lines', name='Proper 2SLS', line=dict(color='#f85149', width=2.5)))
     fig_scatter.update_layout(
-        title=f"Comparative Fit: {dep_var} vs {x_reg_name} (Simultaneity Bias Correction)",
-        xaxis_title=x_reg_name, yaxis_title=dep_var, template="plotly_dark", height=460,
-        paper_bgcolor="#05070b", plot_bgcolor="#0d1117"
+        title=f"Fit: {dep_var} vs {x_reg_name}",
+        xaxis_title=x_reg_name, yaxis_title=dep_var, template="plotly_dark", height=400,
+        paper_bgcolor="#05070b", plot_bgcolor="#0d1117", margin=dict(l=20, r=20, t=40, b=20)
     )
     st.plotly_chart(fig_scatter, use_container_width=True)
 
 with tab_forecast:
-    st.markdown("### 🎯 Walk-Forward Out-of-Sample Alpha Consensus")
+    st.markdown("### 🎯 Walk-Forward Alpha Consensus")
     fc1, fc2, fc3 = st.columns(3)
     with fc1:
         st.markdown("""
             <div class="metric-card">
-                <div class="metric-label">Directional Consensus</div>
-                <div class="metric-val" style="color: #3fb950;">BULLISH (UP)</div>
-                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">Horizon: Next 10 Candles</span>
+                <div class="metric-label">Consensus</div>
+                <div class="metric-val" style="color: #3fb950;">BULLISH</div>
+                <span style="color: #3fb950; font-size: 10px; font-weight: 600;">Next 10 Candles</span>
             </div>
         """, unsafe_allow_html=True)
     with fc2:
         st.markdown("""
             <div class="metric-card">
-                <div class="metric-label">Model Probability</div>
+                <div class="metric-label">Probability</div>
                 <div class="metric-val">79.4%</div>
-                <span style="color: #8b949e; font-size: 11px; font-weight: 600;">Confidence: HIGH</span>
+                <span style="color: #8b949e; font-size: 10px; font-weight: 600;">Confidence</span>
             </div>
         """, unsafe_allow_html=True)
     with fc3:
         st.markdown("""
             <div class="metric-card">
-                <div class="metric-label">Validation Framework</div>
-                <div class="metric-val" style="font-size: 15px;">Walk-Forward Roll</div>
-                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">Zero Look-Ahead Bias</span>
+                <div class="metric-label">Framework</div>
+                <div class="metric-val" style="font-size: 14px;">Walk-Forward</div>
+                <span style="color: #3fb950; font-size: 10px; font-weight: 600;">Zero Bias</span>
             </div>
         """, unsafe_allow_html=True)
         
     st.markdown("<br>", unsafe_allow_html=True)
-    fig_prob = go.Figure(data=[go.Bar(x=["UP (Bullish)", "DOWN (Bearish)", "NEUTRAL"], y=[79.4, 13.5, 7.1], marker_color=["#3fb950", "#f85149", "#8b949e"])])
-    fig_prob.update_layout(title="Probability Distribution Across Next 10 Hourly Forecast Candles", template="plotly_dark", height=350, paper_bgcolor="#05070b", plot_bgcolor="#0d1117", yaxis_title="Probability (%)")
+    fig_prob = go.Figure(data=[go.Bar(x=["UP", "DOWN", "NEUTRAL"], y=[79.4, 13.5, 7.1], marker_color=["#3fb950", "#f85149", "#8b949e"])])
+    fig_prob.update_layout(title="Forecast Probability Distribution", template="plotly_dark", height=320, paper_bgcolor="#05070b", plot_bgcolor="#0d1117", yaxis_title="Probability (%)", margin=dict(l=20, r=20, t=40, b=20))
     st.plotly_chart(fig_prob, use_container_width=True)
 
 with tab_lab:
-    st.markdown("### 📈 Inter-Market Macro Regimes & Hourly Close Correlation")
+    st.markdown("### 📈 Inter-Market Macro Regimes")
     fig_multi = go.Figure()
     fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["XAUUSD"], mode="lines", name="XAUUSD", line=dict(color="#d4af37", width=2)))
     fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["EURUSD"] * 3000, mode="lines", name="EURUSD (Scaled)", line=dict(color="#58a6ff", width=1.5, dash="dot")))
     fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["US500"] * 0.7, mode="lines", name="US500 (Scaled)", line=dict(color="#3fb950", width=1.5, dash="dash")))
-    fig_multi.update_layout(title="Normalized Inter-Market Co-Movement: Gold vs EURUSD vs US 500 (Hourly Close)", xaxis_title="Date", yaxis_title="Index / Price Level", template="plotly_dark", height=440, paper_bgcolor="#05070b", plot_bgcolor="#0d1117")
+    fig_multi.update_layout(title="Normalized Inter-Market Co-Movement", xaxis_title="Date", yaxis_title="Level", template="plotly_dark", height=380, paper_bgcolor="#05070b", plot_bgcolor="#0d1117", margin=dict(l=20, r=20, t=40, b=20))
     st.plotly_chart(fig_multi, use_container_width=True)
