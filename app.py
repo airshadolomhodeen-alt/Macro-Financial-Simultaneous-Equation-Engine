@@ -1,6 +1,6 @@
 """
 Macro-Financial Simultaneous Equation Engine - Institutional Quantitative Terminal
-Live OANDA XAU/USD Integration & Self-Contained Dynamic Econometrics
+Includes Spyder-Style Dual-Regression Scatter Analysis & 2SLS Visualizer
 """
 import sys
 from pathlib import Path
@@ -20,7 +20,7 @@ if str(ROOT_DIR) not in sys.path:
 # --- SETTINGS & CONFIGURATION ---
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Simultaneous Equation Engine"
-    VERSION: str = "2.3.0-OandaLive"
+    VERSION: str = "2.4.0-ComparativeScatter"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     
     @property
@@ -41,9 +41,6 @@ class TwelveDataClient:
         self.base_url = settings.TWELVE_DATA_BASE_URL
 
     def get_oanda_xauusd(self) -> tuple[float, float, pd.DataFrame]:
-        """
-        Fetches real-time OHLCV time-series specifically from OANDA's XAU/USD feed.
-        """
         if not self.api_key:
             raise ValueError("Twelve Data API key is missing.")
         
@@ -266,7 +263,7 @@ with st.sidebar:
 st.markdown("""
     <div class="terminal-header">
         <h1 style="color: #f0f6fc; margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">MACRO-FINANCIAL SIMULTANEOUS EQUATION ENGINE</h1>
-        <p style="color: #8b949e; margin: 5px 0 0 0; font-size: 14px;">Institutional Research Terminal • OANDA XAU/USD Live Telemetry & 2SLS</p>
+        <p style="color: #8b949e; margin: 5px 0 0 0; font-size: 14px;">Institutional Research Terminal • Comparative Dual-Regression Analysis</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -328,9 +325,10 @@ first_stage_df = econometric_engine.run_first_stage_diagnostics(endog_vars, exog
 hausman_df = econometric_engine.hausman_endogeneity_test(dep_var, endog_vars, exog_vars, instruments)
 
 # --- TABS ---
-tab_struct, tab_diag, tab_forecast, tab_lab = st.tabs([
+tab_struct, tab_diag, tab_scatter, tab_forecast, tab_lab = st.tabs([
     "📊 Structural Estimation & Decision Matrix", 
     "🔍 Econometric Diagnostics & IV Strength", 
+    "📈 Dual-Regression Scatter Analysis",
     "🎯 Walk-Forward XAUUSD Decision Support", 
     "📈 Macro Regime & Comparative Analytics"
 ])
@@ -389,6 +387,46 @@ with tab_diag:
     st.markdown("#### Durbin-Wu-Hausman Endogeneity Test Results")
     st.dataframe(hausman_df, use_container_width=True, hide_index=True)
 
+with tab_scatter:
+    st.markdown("### 📈 Dual-Regression Scatter Plot & OLS vs 2SLS Fit Comparison")
+    st.markdown("Visualizing simultaneous equation bias correction: Naive OLS slope vs. proper 2SLS instrumented slope.")
+    
+    # Compute OLS and 2SLS fits specifically for the primary regressor against dependent variable
+    x_reg_name = endog_vars[0]
+    y_vals = engine_data[dep_var]
+    x_vals = engine_data[x_reg_name]
+    
+    # Naive OLS Fit line
+    ols_fit = sm.OLS(y_vals, sm.add_constant(x_vals)).fit()
+    ols_preds = ols_fit.predict(sm.add_constant(x_vals))
+    
+    # 2SLS Fit line simulation using instrument set
+    iv_res = econometric_engine.estimate_2sls(dep_var, endog_vars, exog_vars, instruments)
+    iv_slope = iv_res["table"].loc[iv_res["table"]["Parameter"] == x_reg_name, "Coefficient"].values[0]
+    iv_intercept = iv_res["table"].loc[iv_res["table"]["Parameter"] == "Intercept", "Coefficient"].values[0]
+    iv_preds = iv_intercept + iv_slope * x_vals
+    
+    fig_scatter = go.Figure()
+    fig_scatter.add_trace(go.Scatter(
+        x=x_vals, y=y_vals, mode='markers', name='Observed Data',
+        marker=dict(color='#58a6ff', size=7, opacity=0.8)
+    ))
+    fig_scatter.add_trace(go.Scatter(
+        x=x_vals, y=ols_preds, mode='lines', name='Naive OLS',
+        line=dict(color='#8b949e', width=2.5, dash='dash')
+    ))
+    fig_scatter.add_trace(go.Scatter(
+        x=x_vals, y=iv_preds, mode='lines', name='Proper 2SLS (Corrected)',
+        line=dict(color='#da3633', width=3)
+    ))
+    fig_scatter.update_layout(
+        title=f"Comparative Fit: {dep_var} vs {x_reg_name} (Simultaneity Bias Correction)",
+        xaxis_title=x_reg_name, yaxis_title=dep_var,
+        template="plotly_dark", height=500,
+        paper_bgcolor="#07090e", plot_bgcolor="#161b22"
+    )
+    st.plotly_chart(fig_scatter, use_container_width=True)
+
 with tab_forecast:
     st.markdown("### 🎯 Walk-Forward Out-of-Sample Decision Intelligence")
     fc1, fc2, fc3 = st.columns(3)
@@ -433,7 +471,6 @@ with tab_forecast:
 
 with tab_lab:
     st.markdown("### 📈 Macro-Financial Regime & Comparative Analytics")
-    
     chart_df = oanda_df if oanda_df is not None else engine_data
     y_col = "close" if "close" in chart_df.columns else "XAUUSD"
     
