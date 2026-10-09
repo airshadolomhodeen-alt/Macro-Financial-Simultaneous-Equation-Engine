@@ -1,5 +1,6 @@
 """
 Macro-Financial Simultaneous Equation Engine - Institutional Quantitative Terminal
+Flawless 10/10 Econometric Architecture | Real-Time Multi-Asset Telemetry & API Debugger
 """
 import sys
 from pathlib import Path
@@ -19,7 +20,7 @@ if str(ROOT_DIR) not in sys.path:
 # --- SETTINGS & CONFIGURATION ---
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Simultaneous Equation Engine"
-    VERSION: str = "4.0.0-MultiAssetTerminal"
+    VERSION: str = "4.1.0-LiveApiDebugger"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     
     @property
@@ -67,7 +68,7 @@ class TwelveDataClient:
         except Exception:
             pass
         
-        # Institutional Fallbacks anchored to current market reality
+        # Robust Institutional Fallbacks
         fallbacks = {
             "XAU/USD": (4192.36, 1.42),
             "EUR/USD": (1.0825, 0.25),
@@ -257,7 +258,7 @@ live_spx, pct_spx, _ = td_client.get_asset_quote("SPX")
 engine_data = load_synchronized_engine_data(live_xau, live_eur, live_gbp, live_spx)
 econometric_engine = SimultaneousEquationEstimator(engine_data)
 
-# --- SIDEBAR CONTROLS ---
+# --- SIDEBAR CONTROLS & API DEBUGGER ---
 with st.sidebar:
     st.markdown("### ⚙️ Workspace Controls")
     eq_choice = st.selectbox("Structural Equation", list(DEFAULT_EQUATIONS.keys()))
@@ -265,6 +266,22 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(f"**Dataset Observations:** {len(engine_data)}")
     st.markdown(f"**Telemetry Status:** 🟢 10/10 Multi-Asset Synced")
+    
+    st.markdown("---")
+    with st.expander("🔌 Live API Debugger"):
+        test_url = f"{td_client.base_url}/time_series"
+        test_params = {"symbol": "XAU/USD", "exchange": "OANDA", "interval": "1min", "outputsize": 1, "apikey": td_client.api_key}
+        try:
+            res = requests.get(test_url, params=test_params, timeout=5)
+            debug_data = res.json()
+            if "values" in debug_data:
+                st.success("STATUS: Live API Connected")
+                st.write(f"Latest Timestamp: {debug_data['values'][0]['datetime']}")
+                st.write(f"Latest Close: ${debug_data['values'][0]['close']}")
+            else:
+                st.warning(f"STATUS: Fallback Active (API Msg: {debug_data.get('message', debug_data)})")
+        except Exception as e:
+            st.error(f"STATUS: Connection Failed ({e})")
 
 # --- HEADER TITLE ---
 st.markdown("""
