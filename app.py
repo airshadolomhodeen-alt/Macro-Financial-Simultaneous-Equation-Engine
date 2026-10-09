@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Econometric & ML Terminal"
-    VERSION: str = "8.0.0-PublicationQuality"
+    VERSION: str = "8.1.0-PublicationQuality"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "9ce568bbed6778edaf3fb5ab4044abde")
     
@@ -193,13 +193,18 @@ def validate(df: pd.DataFrame) -> tuple[float, float]:
     return accuracy_score(y_te_r, log_model.predict(X_te_r)), accuracy_score(y_te_p, tree_model.predict(X_te_p))
 
 def write_report(est_res: dict, diag_res: dict) -> str:
-    """Generate publication-quality Markdown report."""
+    """Generate publication-quality Markdown report without external dependencies."""
+    df_table = est_res['table']
+    table_md = "| Parameter | Coefficient | HAC Std. Error | t-statistic | p-value |\n|---|---|---|---|---|\n"
+    for _, row in df_table.iterrows():
+        table_md += f"| {row['Parameter']} | {row['Coefficient']:.4f} | {row['HAC Std. Error']:.4f} | {row['t-statistic']:.4f} | {row['p-value']:.4f} |\n"
+
     return f"""### INSTITUTIONAL QUANTITATIVE RESEARCH REPORT
 **Execution Standard:** Rigorous IV2SLS with Newey-West HAC Standard Errors  
-**Sample Observations ($N$):** {est_res['nobs']} | **RMSE:** {est_res['rmse']:.5f} | **MAE:** {est_res['mae']:.5f}
+**Sample Observations (N):** {est_res['nobs']} | **RMSE:** {est_res['rmse']:.5f} | **MAE:** {est_res['mae']:.5f}
 
 #### 1. Structural Parameter Estimates
-{est_res['table'].to_markdown(index=False)}
+{table_md}
 
 #### 2. Stationarity & Diagnostic Audits
 - **ADF Stationarity:** {diag_res['ADF Stationary']} (Stat: {diag_res['ADF Stat']}, p: {diag_res['ADF p-val']})
@@ -208,11 +213,11 @@ def write_report(est_res: dict, diag_res: dict) -> str:
 
 #### 3. Methodological Limitations
 - Models estimated on stationary log returns to avoid spurious regression pitfalls.
-- Standard errors corrected for autocorrelation and heteroskedasticity via Newey-West HAC ($maxlags=4$).
+- Standard errors corrected for autocorrelation and heteroskedasticity via Newey-West HAC (maxlags=4).
 """
 
 # --- STREAMLIT UI ---
-st.set_page_config(page_title="Macro-Financial Econometric & ML Trading Terminal", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="Econometric & ML Trading Terminal", page_icon="⚡", layout="wide")
 
 st.markdown("""
     <style>
