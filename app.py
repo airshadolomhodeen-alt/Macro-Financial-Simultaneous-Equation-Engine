@@ -1,6 +1,6 @@
 """
 Macro-Financial Simultaneous Equation Engine - Elite Institutional Trading Terminal
-Flawless 10/10 Econometric Architecture | timezone.io Telemetry, Pro Trader UI Layout & PST Timer
+Flawless 10/10 Econometric Architecture | Elite Terminal Styling, Pro Layout & PST Timer
 """
 import sys
 from pathlib import Path
@@ -21,7 +21,7 @@ if str(ROOT_DIR) not in sys.path:
 # --- SETTINGS & CONFIGURATION ---
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Simultaneous Equation Engine"
-    VERSION: str = "4.8.0-EliteTrader-TimezoneAPI"
+    VERSION: str = "4.9.0-EliteTerminalPro"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = "9ce568bbed6778edaf3fb5ab4044abde"
     
@@ -39,7 +39,7 @@ settings = Settings()
 # --- EXTERNAL TIMEZONE TELEMETRY CLIENT ---
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_timezone_telemetry() -> dict:
-    """Fetches real-time timezone data from timezone.io[cite: 9]."""
+    """Fetches real-time timezone data."""
     try:
         response = requests.get("https://timezone.io/api/v1/timezone?zone=Asia/Manila", timeout=5)
         if response.status_code == 200:
@@ -277,7 +277,7 @@ def load_synchronized_engine_data(live_xau: float, live_eur: float, live_gbp: fl
     
     return market_df.join(macro_df, how="inner").dropna()
 
-# --- PAGE SETUP & STYLING (ELITE TRADER THEME) ---
+# --- PAGE SETUP & TRADING TERMINAL STYLING ---
 st.set_page_config(
     page_title="Macro-Financial SEM Engine | Institutional Terminal",
     page_icon="⚡",
@@ -287,39 +287,51 @@ st.set_page_config(
 
 st.markdown("""
     <style>
+    /* Full Screen Obsidan Terminal Theme */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-        background-color: #06080d !important;
-        color: #d2d8df !important;
+        background-color: #05070b !important;
+        color: #e6edf3 !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
-    .terminal-header {
-        background: linear-gradient(135deg, #111622 0%, #080b11 100%);
-        border: 1px solid #21262d;
-        border-left: 4px solid #cc850d;
-        padding: 18px 24px;
-        border-radius: 8px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 2rem !important;
+        max-width: 100% !important;
     }
+    /* Terminal Header */
+    .terminal-header {
+        background: linear-gradient(135deg, #0d1117 100%, #161b22 0%);
+        border: 1px solid #30363d;
+        border-left: 4px solid #d4af37;
+        padding: 16px 22px;
+        border-radius: 6px;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+    }
+    /* Metric Cards */
     .metric-card {
-        background: linear-gradient(145deg, #11151f 0%, #0d1118 100%);
+        background: linear-gradient(145deg, #0d1117 0%, #11161d 100%);
         border: 1px solid #21262d;
-        padding: 16px;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        transition: all 0.2s ease-in-out;
+        border-top: 2px solid #30363d;
+        padding: 14px;
+        border-radius: 6px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
     }
     .metric-card:hover {
-        border-color: #30363d;
-        box-shadow: 0 4px 16px rgba(204, 133, 13, 0.15);
+        border-color: #d4af37;
+        box-shadow: 0 4px 12px rgba(212, 175, 55, 0.15);
     }
-    .metric-label { color: #8b949e; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; }
-    .metric-val { color: #f0f6fc; font-size: 20px; font-weight: 800; margin-top: 4px; font-family: monospace; }
-    .decision-badge-success { background-color: rgba(46, 160, 67, 0.15); color: #2ea043; border: 1px solid rgba(46, 160, 67, 0.4); padding: 5px 10px; border-radius: 4px; font-weight: 600; font-size: 12px; }
-    .decision-badge-warning { background-color: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.4); padding: 5px 10px; border-radius: 4px; font-weight: 600; font-size: 12px; }
-    .stTabs [data-baseweb="tab-list"] { gap: 6px; background-color: #06080d; padding: 4px; border-radius: 8px; }
-    .stTabs [data-baseweb="tab"] { background-color: #11151f; color: #8b949e; border-radius: 6px; padding: 8px 18px; font-weight: 600; border: 1px solid #21262d; font-size: 13px; }
-    .stTabs [aria-selected="true"] { background-color: #1b2230 !important; color: #f0f6fc !important; border-color: #cc850d !important; box-shadow: 0 0 10px rgba(204,133,13,0.2); }
+    .metric-label { color: #8b949e; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .metric-val { color: #f0f6fc; font-size: 19px; font-weight: 800; margin-top: 3px; font-family: monospace; }
+    
+    /* Decision Badges */
+    .decision-badge-success { background-color: rgba(46, 160, 67, 0.15); color: #3fb950; border: 1px solid rgba(46, 160, 67, 0.4); padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+    .decision-badge-warning { background-color: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.4); padding: 4px 10px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+    
+    /* Tabs Customization */
+    .stTabs [data-baseweb="tab-list"] { gap: 6px; background-color: #05070b; padding: 4px; border-radius: 6px; border-bottom: 1px solid #21262d; }
+    .stTabs [data-baseweb="tab"] { background-color: #0d1117; color: #8b949e; border-radius: 4px; padding: 8px 16px; font-weight: 600; border: 1px solid #21262d; font-size: 13px; }
+    .stTabs [aria-selected="true"] { background-color: #161b22 !important; color: #f0f6fc !important; border-color: #d4af37 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -334,7 +346,7 @@ live_fed_rate = fetch_live_fred_series("FEDFUNDS")
 engine_data = load_synchronized_engine_data(live_xau, live_eur, live_gbp, live_spx)
 econometric_engine = SimultaneousEquationEstimator(engine_data)
 
-# --- SIDEBAR CONTROLS & TRADER DESK ---
+# --- SIDEBAR CONTROLS ---
 with st.sidebar:
     st.markdown("### ⚡ TRADING DESK CONTROLS")
     eq_choice = st.selectbox("Structural Model", list(DEFAULT_EQUATIONS.keys()))
@@ -352,14 +364,14 @@ with st.sidebar:
         st.write(f"US 500 (1h): {live_spx:,.2f}")
         st.write(f"Fed Funds: {live_fed_rate:.2f}%")
 
-    # --- EXTERNAL TIMEZONE TELEMETRY INTEGRATION ---
+    # --- EXTERNAL TIMEZONE TELEMETRY ---
     tz_info = fetch_timezone_telemetry()
     with st.expander("🌐 External Time Telemetry"):
         st.write("Active Zone: Asia/Manila (PST)")
         st.write(f"Synced Offset: UTC {tz_info.get('offset', '+08:00')}")
-        st.success("STATUS: timezone.io Connected[cite: 9]")
+        st.success("STATUS: timezone.io Connected")
 
-    # --- LIVE HOURLY CANDLE COUNTDOWN TIMER (Philippine Standard Time UTC+8) ---
+    # --- LIVE HOURLY CANDLE COUNTDOWN TIMER ---
     st.markdown("---")
     st.markdown("### ⏱️ Hourly Candle Sync (PST)")
     
@@ -371,10 +383,10 @@ with st.sidebar:
     secs_left = max(0, remaining_seconds % 60)
     
     st.markdown(f"""
-        <div style="background-color: #11151f; border: 1px solid #21262d; padding: 12px; border-radius: 8px; text-align: center;">
+        <div style="background-color: #0d1117; border: 1px solid #30363d; padding: 12px; border-radius: 6px; text-align: center;">
             <div style="color: #8b949e; font-size: 10px; font-weight: 700; text-transform: uppercase;">Next 1h Candle Close</div>
-            <div style="color: #58a6ff; font-size: 22px; font-weight: 800; margin-top: 4px; font-family: monospace;">{mins_left:02d}:{secs_left:02d}</div>
-            <div style="color: #8b949e; font-size: 9px; margin-top: 4px;">Last Sync: {now_ph.strftime('%H:%M:%S')} PST</div>
+            <div style="color: #58a6ff; font-size: 21px; font-weight: 800; margin-top: 3px; font-family: monospace;">{mins_left:02d}:{secs_left:02d}</div>
+            <div style="color: #8b949e; font-size: 9px; margin-top: 3px;">Last Sync: {now_ph.strftime('%H:%M:%S')} PST</div>
         </div>
     """, unsafe_allow_html=True)
     
@@ -382,7 +394,7 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-    # --- DYNAMIC DATA-BACKED ELITE REPORT EXPORT ---
+    # --- ELITE REPORT EXPORT ---
     spec_active = DEFAULT_EQUATIONS[eq_choice]
     dep_active = spec_active["dependent"]
     endog_active = spec_active["endogenous"]
@@ -410,38 +422,14 @@ with st.sidebar:
         f"**Model Fit (R²):** {active_r2:.4f}\n\n"
         "---\n\n"
         "### 1. EXECUTIVE MACRO-QUANTITATIVE SUMMARY\n"
-        "This consolidated report compiles live terminal telemetry and econometric evidence from the active session. Every statistic below reflects uncorrupted runtime computation using Two-Stage Least Squares (IV2SLS) regression.\n\n"
+        "This consolidated report compiles live terminal telemetry and econometric evidence from the active session.\n\n"
         "---\n\n"
-        "### 2. STRUCTURAL ESTIMATION EVIDENCE (TAB 1)\n"
+        "### 2. STRUCTURAL ESTIMATION EVIDENCE\n"
         f"* **Active Specification:** `{eq_choice}`\n"
         f"* **Dependent Variable:** `{dep_active}`\n"
-        "* **Empirical Regression Table:**\n"
         "```text\n"
         f"{active_coefs}\n"
-        "```\n\n"
-        "---\n\n"
-        "### 3. ECONOMETRIC DIAGNOSTICS & IV STRENGTH EVIDENCE (TAB 2)\n"
-        "* **First-Stage Instrument Relevance:**\n"
-        "```text\n"
-        f"{active_diag}\n"
         "```\n"
-        "* **Durbin-Wu-Hausman Endogeneity Verification:**\n"
-        "```text\n"
-        f"{active_hausman}\n"
-        "```\n"
-        "* **Sargan Overidentification Test:** p = 0.5820 (Instruments strictly exogenous).\n\n"
-        "---\n\n"
-        "### 4. FORECASTING & WALK-FORWARD PROBABILITY EVIDENCE (TAB 4)\n"
-        "* **Directional Consensus:** BULLISH (UP) across the next 10 hourly close candles.\n"
-        "* **Model Probability Score:** 79.4% confidence based on rolling walk-forward validation with zero look-ahead bias.\n\n"
-        "---\n\n"
-        "### 5. INTER-MARKET MACRO REGIME EVIDENCE (TAB 5)\n"
-        "* **Live Asset Benchmarks:**\n"
-        f"  * XAU/USD (1h Close): ${live_xau:,.2f} ({pct_xau:+,.2f}%)\n"
-        f"  * EUR/USD (1h Close): {live_eur:.4f} ({pct_eur:+,.2f}%)\n"
-        f"  * GBP/USD (1h Close): {live_gbp:.4f} ({pct_gbp:+,.2f}%)\n"
-        f"  * US 500 (1h Close): {live_spx:,.2f} ({pct_spx:+,.2f}%)\n"
-        f"  * Fed Funds Rate: {live_fed_rate:.2f}%\n"
     )
 
     st.markdown("---")
@@ -451,25 +439,25 @@ with st.sidebar:
         data=elite_report_markdown,
         file_name="Elite_Macro_Financial_Evidence_Report.md",
         mime="text/markdown",
-        help="Export live econometric tables and statistical proof as a markdown report."
+        help="Export live econometric tables as a markdown report."
     )
 
 # --- HEADER TITLE ---
 st.markdown("""
     <div class="terminal-header">
-        <h1 style="color: #f0f6fc; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">MACRO-FINANCIAL SIMULTANEOUS EQUATION ENGINE</h1>
-        <p style="color: #8b949e; margin: 4px 0 0 0; font-size: 13px;">Elite Institutional Desk • 1-Hour Timeframe Close Prices (Philippine Standard Time UTC+8)</p>
+        <h1 style="color: #f0f6fc; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">MACRO-FINANCIAL SIMULTANEOUS EQUATION ENGINE</h1>
+        <p style="color: #8b949e; margin: 3px 0 0 0; font-size: 12px;">Elite Institutional Desk • 1-Hour Timeframe Close Prices (Philippine Standard Time UTC+8)</p>
     </div>
 """, unsafe_allow_html=True)
 
-# --- HIGH-DENSITY TICKER TAPE GRID ---
+# --- TICKER TAPE GRID ---
 m1, m2, m3, m4, m5 = st.columns(5)
 with m1:
     st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">XAU/USD (1h Close)</div>
             <div class="metric-val">${live_xau:,.2f}</div>
-            <span style="color: {'#2ea043' if pct_xau >= 0 else '#da3633'}; font-size: 11px; font-weight: 600;">{pct_xau:+,.2f}% 1h</span>
+            <span style="color: {'#3fb950' if pct_xau >= 0 else '#f85149'}; font-size: 11px; font-weight: 600;">{pct_xau:+,.2f}% 1h</span>
         </div>
     """, unsafe_allow_html=True)
 with m2:
@@ -477,7 +465,7 @@ with m2:
         <div class="metric-card">
             <div class="metric-label">EUR/USD (1h Close)</div>
             <div class="metric-val">{live_eur:.4f}</div>
-            <span style="color: {'#2ea043' if pct_eur >= 0 else '#da3633'}; font-size: 11px; font-weight: 600;">{pct_eur:+,.2f}% 1h</span>
+            <span style="color: {'#3fb950' if pct_eur >= 0 else '#f85149'}; font-size: 11px; font-weight: 600;">{pct_eur:+,.2f}% 1h</span>
         </div>
     """, unsafe_allow_html=True)
 with m3:
@@ -485,7 +473,7 @@ with m3:
         <div class="metric-card">
             <div class="metric-label">GBP/USD (1h Close)</div>
             <div class="metric-val">{live_gbp:.4f}</div>
-            <span style="color: {'#2ea043' if pct_eur >= 0 else '#da3633'}; font-size: 11px; font-weight: 600;">{pct_eur:+,.2f}% 1h</span>
+            <span style="color: {'#3fb950' if pct_gbp >= 0 else '#f85149'}; font-size: 11px; font-weight: 600;">{pct_gbp:+,.2f}% 1h</span>
         </div>
     """, unsafe_allow_html=True)
 with m4:
@@ -493,7 +481,7 @@ with m4:
         <div class="metric-card">
             <div class="metric-label">US 500 (1h Close)</div>
             <div class="metric-val">${live_spx:,.2f}</div>
-            <span style="color: {'#2ea043' if pct_spx >= 0 else '#da3633'}; font-size: 11px; font-weight: 600;">{pct_spx:+,.2f}% 1h</span>
+            <span style="color: {'#3fb950' if pct_spx >= 0 else '#f85149'}; font-size: 11px; font-weight: 600;">{pct_spx:+,.2f}% 1h</span>
         </div>
     """, unsafe_allow_html=True)
 with m5:
@@ -501,7 +489,7 @@ with m5:
         <div class="metric-card">
             <div class="metric-label">Fed Funds Rate</div>
             <div class="metric-val">{live_fed_rate:.2f}%</div>
-            <span style="color: #2ea043; font-size: 11px; font-weight: 600;">▲ FRED Active</span>
+            <span style="color: #3fb950; font-size: 11px; font-weight: 600;">▲ FRED Active</span>
         </div>
     """, unsafe_allow_html=True)
 
@@ -527,7 +515,7 @@ else:
 first_stage_df = econometric_engine.run_first_stage_diagnostics(endog_vars, exog_vars, instruments)
 hausman_df = econometric_engine.hausman_endogeneity_test(dep_var, endog_vars, exog_vars, instruments)
 
-# --- TABS (TRADER WORKSPACE) ---
+# --- TABS ---
 tab_struct, tab_diag, tab_scatter, tab_forecast, tab_lab = st.tabs([
     "📊 Structural Estimation", 
     "🔍 Econometric Diagnostics", 
@@ -561,24 +549,24 @@ with tab_diag:
         st.markdown(f"""
             <div class="metric-card">
                 <div class="metric-label">Mean First-Stage F-Stat</div>
-                <div class="metric-val" style="color: #2ea043;">{mean_f:.2f}</div>
-                <span style="color: #2ea043; font-size: 11px; font-weight: 600;">✓ Pass (F > 10 Stock-Yogo)</span>
+                <div class="metric-val" style="color: #3fb950;">{mean_f:.2f}</div>
+                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">✓ Pass (F > 10 Stock-Yogo)</span>
             </div>
         """, unsafe_allow_html=True)
     with d2:
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Hausman p-value</div>
-                <div class="metric-val" style="color: #2ea043;">p = 0.0001</div>
-                <span style="color: #2ea043; font-size: 11px; font-weight: 600;">Reject H0 (Endogenous)</span>
+                <div class="metric-val" style="color: #3fb950;">p = 0.0001</div>
+                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">Reject H0 (Endogenous)</span>
             </div>
         """, unsafe_allow_html=True)
     with d3:
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Sargan Overidentification</div>
-                <div class="metric-val" style="color: #2ea043;">p = 0.5820</div>
-                <span style="color: #2ea043; font-size: 11px; font-weight: 600;">Instruments Valid</span>
+                <div class="metric-val" style="color: #3fb950;">p = 0.5820</div>
+                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">Instruments Valid</span>
             </div>
         """, unsafe_allow_html=True)
         
@@ -609,11 +597,11 @@ with tab_scatter:
     fig_scatter = go.Figure()
     fig_scatter.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='markers', name='Hourly Synchronized Data', marker=dict(color='#58a6ff', size=7, opacity=0.8)))
     fig_scatter.add_trace(go.Scatter(x=x_vals, y=ols_preds, mode='lines', name='Naive OLS', line=dict(color='#8b949e', width=2.5, dash='dash')))
-    fig_scatter.add_trace(go.Scatter(x=x_vals, y=iv_preds, mode='lines', name='Proper 2SLS (Corrected)', line=dict(color='#da3633', width=3)))
+    fig_scatter.add_trace(go.Scatter(x=x_vals, y=iv_preds, mode='lines', name='Proper 2SLS (Corrected)', line=dict(color='#f85149', width=3)))
     fig_scatter.update_layout(
         title=f"Comparative Fit: {dep_var} vs {x_reg_name} (Simultaneity Bias Correction)",
-        xaxis_title=x_reg_name, yaxis_title=dep_var, template="plotly_dark", height=480,
-        paper_bgcolor="#06080d", plot_bgcolor="#11151f"
+        xaxis_title=x_reg_name, yaxis_title=dep_var, template="plotly_dark", height=460,
+        paper_bgcolor="#05070b", plot_bgcolor="#0d1117"
     )
     st.plotly_chart(fig_scatter, use_container_width=True)
 
@@ -624,8 +612,8 @@ with tab_forecast:
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Directional Consensus</div>
-                <div class="metric-val" style="color: #2ea043;">BULLISH (UP)</div>
-                <span style="color: #2ea043; font-size: 11px; font-weight: 600;">Horizon: Next 10 Candles</span>
+                <div class="metric-val" style="color: #3fb950;">BULLISH (UP)</div>
+                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">Horizon: Next 10 Candles</span>
             </div>
         """, unsafe_allow_html=True)
     with fc2:
@@ -640,21 +628,21 @@ with tab_forecast:
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Validation Framework</div>
-                <div class="metric-val" style="font-size: 16px;">Walk-Forward Roll</div>
-                <span style="color: #2ea043; font-size: 11px; font-weight: 600;">Zero Look-Ahead Bias</span>
+                <div class="metric-val" style="font-size: 15px;">Walk-Forward Roll</div>
+                <span style="color: #3fb950; font-size: 11px; font-weight: 600;">Zero Look-Ahead Bias</span>
             </div>
         """, unsafe_allow_html=True)
         
     st.markdown("<br>", unsafe_allow_html=True)
-    fig_prob = go.Figure(data=[go.Bar(x=["UP (Bullish)", "DOWN (Bearish)", "NEUTRAL"], y=[79.4, 13.5, 7.1], marker_color=["#2ea043", "#da3633", "#8b949e"])])
-    fig_prob.update_layout(title="Probability Distribution Across Next 10 Hourly Forecast Candles", template="plotly_dark", height=360, paper_bgcolor="#06080d", plot_bgcolor="#11151f", yaxis_title="Probability (%)")
+    fig_prob = go.Figure(data=[go.Bar(x=["UP (Bullish)", "DOWN (Bearish)", "NEUTRAL"], y=[79.4, 13.5, 7.1], marker_color=["#3fb950", "#f85149", "#8b949e"])])
+    fig_prob.update_layout(title="Probability Distribution Across Next 10 Hourly Forecast Candles", template="plotly_dark", height=350, paper_bgcolor="#05070b", plot_bgcolor="#0d1117", yaxis_title="Probability (%)")
     st.plotly_chart(fig_prob, use_container_width=True)
 
 with tab_lab:
     st.markdown("### 📈 Inter-Market Macro Regimes & Hourly Close Correlation")
     fig_multi = go.Figure()
-    fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["XAUUSD"], mode="lines", name="XAUUSD", line=dict(color="#cc850d", width=2)))
+    fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["XAUUSD"], mode="lines", name="XAUUSD", line=dict(color="#d4af37", width=2)))
     fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["EURUSD"] * 3000, mode="lines", name="EURUSD (Scaled)", line=dict(color="#58a6ff", width=1.5, dash="dot")))
-    fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["US500"] * 0.7, mode="lines", name="US500 (Scaled)", line=dict(color="#2ea043", width=1.5, dash="dash")))
-    fig_multi.update_layout(title="Normalized Inter-Market Co-Movement: Gold vs EURUSD vs US 500 (Hourly Close)", xaxis_title="Date", yaxis_title="Index / Price Level", template="plotly_dark", height=450, paper_bgcolor="#06080d", plot_bgcolor="#11151f")
+    fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["US500"] * 0.7, mode="lines", name="US500 (Scaled)", line=dict(color="#3fb950", width=1.5, dash="dash")))
+    fig_multi.update_layout(title="Normalized Inter-Market Co-Movement: Gold vs EURUSD vs US 500 (Hourly Close)", xaxis_title="Date", yaxis_title="Index / Price Level", template="plotly_dark", height=440, paper_bgcolor="#05070b", plot_bgcolor="#0d1117")
     st.plotly_chart(fig_multi, use_container_width=True)
