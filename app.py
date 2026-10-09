@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial Econometric & ML Terminal"
-    VERSION: str = "7.2.0-ResilientEngine"
+    VERSION: str = "7.3.0-ResilientEngine"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     FRED_API_KEY: str = os.getenv("FRED_API_KEY", "9ce568bbed6778edaf3fb5ab4044abde")
     
@@ -71,7 +71,6 @@ def load_and_align_data(symbol: str = "XAU/USD") -> tuple[pd.DataFrame, bool]:
     except Exception as e:
         logger.warning(f"Live API connection failed: {e}. Falling back to high-fidelity simulation engine.")
 
-    # Fallback synthetic historical dataset to prevent app crash when API is unreachable
     date_range = pd.date_range(end=datetime.now(), periods=600, freq="h")
     np.random.seed(42)
     prices = 4150.0 + np.cumsum(np.random.normal(0.5, 12.0, len(date_range)))
@@ -124,47 +123,57 @@ class EconometricEngine:
         }
 
     def estimate_iv_2sls(self, dep_var: str, endog_vars: list, exog_vars: list, instruments: list) -> dict:
-        from statsmodels.gmm.ivivm import IV2SLS
-        
+        """Robust Two-Stage Least Squares (2SLS) with Newey-West HAC Standard Errors."""
         Y = self.data[dep_var]
         X_endog = self.data[endog_vars]
         X_exog = self.data[exog_vars] if exog_vars else None
         Z_inst = self.data[instruments]
         
-        exog_full = sm.add_constant(pd.concat([X_endog, X_exog], axis=1)) if X_exog is not None else sm.add_constant(X_endog)
-        inst_full = sm.add_constant(pd.concat([X_exog, Z_inst], axis=1)) if X_exog is not None else sm.add_constant(Z_inst)
+        # First-stage instrument matrix
+        inst_full = sm.add_constant(pd.concat([X_exog, Z_inst], axis=1) if X_exog is not None else Z_inst)
         
-        iv_model = IV2SLS(endog=Y, exog=exog_full, instrument=inst_full).fit(cov_type="HAC", maxlags=4)
-        
+        # First-stage regressions & fitted values
+        X_hat = np.empty_like(X_endog)
         fs_results = {}
-        for endog in endog_vars:
-            fs_fit = sm.OLS(X_endog[endog], inst_full).fit(cov_type="HAC", maxlags=4)
+        for i, col in enumerate(endog_vars):
+            fs_fit = sm.OLS(X_endog[col], inst_full).fit()
+            X_hat[:, i] = fs_fit.fittedvalues
             f_stat = fs_fit.f_test(np.eye(len(inst_full.columns))[1:])
-            fs_results[endog] = {
+            fs_results[col] = {
                 "r_squared": round(fs_fit.rsquared, 4),
                 "f_stat": round(float(f_stat.fvalue), 2),
                 "p_value": round(float(f_stat.pvalue), 4)
             }
             
+        # Second-stage design matrix
+        X_second_df = pd.DataFrame(X_hat, columns=endog_vars, index=self.data.index)
+        if X_exog is not None:
+            for col in exog_vars:
+                X_second_df[col] = self.data[col]
+        X_second = sm.add_constant(X_second_df)
+        
+        # Second-stage regression with Newey-West HAC standard errors
+        second_fit = sm.OLS(Y, X_second).fit(cov_type="HAC", maxlags=4)
+        
         results_df = pd.DataFrame({
-            "Parameter": iv_model.params.index,
-            "Coefficient": iv_model.params.values,
-            "HAC Std. Error": iv_model.bse.values,
-            "t-statistic": iv_model.tvalues.values,
-            "p-value": iv_model.pvalues.values
+            "Parameter": second_fit.params.index,
+            "Coefficient": second_fit.params.values,
+            "HAC Std. Error": second_fit.bse.values,
+            "t-statistic": second_fit.tvalues.values,
+            "p-value": second_fit.pvalues.values
         })
         
-        preds = iv_model.predict(exog_full)
+        preds = second_fit.predict(X_second)
         rmse = np.sqrt(np.mean((Y - preds) ** 2))
         mae = np.mean(np.abs(Y - preds))
         
         return {
-            "model_fit": iv_model,
+            "model_fit": second_fit,
             "table": results_df,
             "first_stage": fs_results,
             "rmse": rmse,
             "mae": mae,
-            "nobs": int(iv_model.nobs)
+            "nobs": int(second_fit.nobs)
         }
 
 def train_ml_models(df: pd.DataFrame):
