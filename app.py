@@ -130,9 +130,15 @@ DEFAULT_EQUATIONS = {
         "exogenous": ["GDPC1", "UNRATE", "NETEXC"],
         "instruments": ["PCEC96", "GCEC1"],
         "description": "Explains Dollar Index dynamics through global trade and economic activity."
+    },
+    "Custom FX Equilibrium (Equation 4)": {
+        "dependent": "EURUSD",
+        "endogenous": ["XAUUSD", "FEDFUNDS"],
+        "exogenous": ["GDPC1", "UNRATE"],
+        "instruments": ["NETEXC", "PCEC96"],
+        "description": "Explains EUR/USD spot dynamics through gold arbitrage, interest rate differentials, and trade balances."
     }
 }
-
 # --- ROBUST SELF-CONTAINED 2SLS ECONOMETRIC ENGINE ---
 class SimultaneousEquationEstimator:
     def __init__(self, data: pd.DataFrame):
