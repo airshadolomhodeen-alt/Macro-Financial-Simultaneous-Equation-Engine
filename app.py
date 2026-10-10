@@ -526,9 +526,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### ⚙️ Random Forest Regularization")
     rf_n_estimators = st.slider("Number of Estimators", min_value=50, max_value=300, value=100, step=50)
-    rf_max_depth = st.slider("Max Tree Depth", min_value=2, max_value=10, value=4, step=1)
-    rf_min_samples_split = st.slider("Min Samples Split", min_value=2, max_value=50, value=20, step=5)
-    rf_min_samples_leaf = st.slider("Min Samples Leaf", min_value=1, max_value=30, value=10, step=2)
+    rf_max_depth = st.slider("Max Tree Depth", min_value=2, max_value=15, value=6, step=1)  # Increased from 4 to 6
+    rf_min_samples_split = st.slider("Min Samples Split", min_value=2, max_value=50, value=10, step=2)  # Decreased from 20 to 10
+    rf_min_samples_leaf = st.slider("Min Samples Leaf", min_value=1, max_value=30, value=2, step=1)  # Decreased from 10 to 2
     
     st.markdown("---")
     st.markdown(f"**Live Observations:** `{len(engine_data)}`")
