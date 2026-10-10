@@ -294,7 +294,7 @@ class EconometricEngine:
             "nobs": int(second_fit.nobs)
         }
 
-def train_ml_models(df: pd.DataFrame, n_estimators: int = 100, max_depth: int = 4, min_samples_split: int = 20, min_samples_leaf: int = 10):
+def train_ml_models(df: pd.DataFrame, n_estimators: int = 100, max_depth: int = 6, min_samples_split: int = 10, min_samples_leaf: int = 2):
     feature_cols = [
         "start", "stop", "TP", "SL", 
         "zscore_spread", 
@@ -526,9 +526,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### ⚙️ Random Forest Regularization")
     rf_n_estimators = st.slider("Number of Estimators", min_value=50, max_value=300, value=100, step=50)
-    rf_max_depth = st.slider("Max Tree Depth", min_value=2, max_value=15, value=6, step=1)  # Increased from 4 to 6
-    rf_min_samples_split = st.slider("Min Samples Split", min_value=2, max_value=50, value=10, step=2)  # Decreased from 20 to 10
-    rf_min_samples_leaf = st.slider("Min Samples Leaf", min_value=1, max_value=30, value=2, step=1)  # Decreased from 10 to 2
+    rf_max_depth = st.slider("Max Tree Depth", min_value=2, max_value=15, value=6, step=1)
+    rf_min_samples_split = st.slider("Min Samples Split", min_value=2, max_value=50, value=10, step=2)
+    rf_min_samples_leaf = st.slider("Min Samples Leaf", min_value=1, max_value=30, value=2, step=1)
     
     st.markdown("---")
     st.markdown(f"**Live Observations:** `{len(engine_data)}`")
@@ -761,6 +761,46 @@ with tab_forecast:
         st.plotly_chart(fig_fi, use_container_width=True)
 
 with tab_lab:
+    st.markdown("### 📈 Live TradingView Advanced Chart Workspace")
+    st.markdown("Institutional-grade interactive candlestick charts synchronized with live market feeds.")
+    
+    tv_choice = st.selectbox(
+        "Select Chart Asset", 
+        ["XAU/USD (Gold)", "EUR/USD (Euro)", "GBP/USD (Pound)", "DXY (US Dollar Index)"],
+        key="tv_symbol_selector"
+    )
+    
+    symbol_map = {
+        "XAU/USD (Gold)": "OANDA:XAUUSD",
+        "EUR/USD (Euro)": "OANDA:EURUSD",
+        "GBP/USD (Pound)": "OANDA:GBPUSD",
+        "DXY (US Dollar Index)": "FX_IDC:DXY"
+    }
+    selected_tv_symbol = symbol_map[tv_choice]
+    
+    tradingview_html = f"""
+    <div class="tradingview-widget-container" style="height:500px;width:100%">
+      <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+      {{
+        "autosize": true,
+        "symbol": "{selected_tv_symbol}",
+        "interval": "60",
+        "timezone": "Etc/UTC",
+        "theme": "dark",
+        "style": "1",
+        "locale": "en",
+        "allow_symbol_change": true,
+        "calendar": false,
+        "support_host": "https://www.tradingview.com"
+      }}
+      </script>
+    </div>
+    """
+    
+    st.components.v1.html(tradingview_html, height=520)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### 📈 Multi-Asset Array Co-Movement & Spread Residuals")
     fig_multi = go.Figure()
     fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["XAU_USD"], mode="lines", name="XAU/USD", line=dict(color="#F59E0B", width=2)))
