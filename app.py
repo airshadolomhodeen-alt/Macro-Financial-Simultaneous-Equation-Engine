@@ -18,7 +18,6 @@ from statsmodels.tsa.stattools import adfuller, kpss
 from statsmodels.stats.diagnostic import het_arch
 
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import SelectFromModel
 from sklearn.metrics import accuracy_score
@@ -193,24 +192,28 @@ def process_institutional_features(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.columns:
         df[f"log_return_{col.lower()}"] = np.log(df[col] / df[col].shift(1))
     
-    df["corr_xau_eur"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_eur_usd"])
-    df["corr_xau_dxy"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_dxy"])
+    # Strictly lagged rolling features to prevent future data leakage
+    df["corr_xau_eur"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_eur_usd"]).shift(1)
+    df["corr_xau_dxy"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_dxy"]).shift(1)
     
     df["spread_residual"] = df["XAU_USD"] - (1.25 * df["EUR_USD"] + 1.10 * df["GBP_USD"])
-    df["zscore_spread"] = (df["spread_residual"] - df["spread_residual"].rolling(50).mean()) / df["spread_residual"].rolling(50).std()
+    df["zscore_spread"] = ((df["spread_residual"] - df["spread_residual"].rolling(50).mean()) / df["spread_residual"].rolling(50).std()).shift(1)
     
-    df["fed_funds_surprise"] = np.random.normal(0, 0.02, len(df))
-    df["instrument_z"] = np.random.normal(0, 1.0, len(df))
-    
-    xau_col = "XAU_USD"
-    df["start"] = df[xau_col]
-    df["stop"] = df[xau_col].shift(1)
-    rolling_std = df[xau_col].rolling(window=14).std().bfill()
+    # Economically sound ex-ante features (strictly lagged)
+    df["start"] = df["XAU_USD"].shift(1)
+    df["stop"] = df["XAU_USD"].shift(2)
+    rolling_std = df["XAU_USD"].rolling(window=14).std().shift(1).bfill()
     df["TP"] = df["start"] + (2.0 * rolling_std)
     df["SL"] = df["start"] - (1.0 * rolling_std)
-    df["future_return"] = df[xau_col].shift(-5) - df[xau_col]
+    
+    # Target definition: 10-bar forward return direction
+    df["future_return"] = df["XAU_USD"].shift(-10) - df["XAU_USD"]
     df["result"] = (df["future_return"] > 0).astype(int)
-    df["percentage"] = (df["future_return"] / df[xau_col]) * 100
+    df["percentage"] = (df["future_return"] / df["XAU_USD"]) * 100
+    
+    # Valid macroeconomic instruments (lagged change in EUR/USD and DXY as valid IVs)
+    df["instrument_z"] = df["log_return_eur_usd"].shift(1)
+    df["fed_funds_surprise"] = df["log_return_dxy"].shift(1)
     
     return df.dropna()
 
@@ -306,28 +309,32 @@ def train_ml_models(df: pd.DataFrame, n_estimators: int = 100, max_depth: int = 
     
     X = sub_df[feature_cols]
     target_result = sub_df["result"]
-    target_percentage = (sub_df["percentage"] > 0).astype(int)
     
+    # 70% Training (Trial), 20% Validation (Tune & Meta-Fit), 10% Final Holdout Test
+    n = len(X)
+    train_end = int(n * 0.70)
+    val_end = int(n * 0.90)
+    
+    X_train = X.iloc[:train_end]
+    y_train = target_result.iloc[:train_end]
+    
+    # Feature selection strictly on training fold to prevent leakage
     prelim_rf = RandomForestClassifier(n_estimators=50, max_depth=max_depth, random_state=42)
-    prelim_rf.fit(X, target_result)
+    prelim_rf.fit(X_train, y_train)
     
     selector = SelectFromModel(prelim_rf, threshold="mean", prefit=True)
-    X_reduced = selector.transform(X)
-    
     selected_feature_mask = selector.get_support()
     reduced_feature_cols = [col for col, keep in zip(feature_cols, selected_feature_mask) if keep]
     pruned_feature_cols = [col for col, keep in zip(feature_cols, selected_feature_mask) if not keep]
     
-    X_reduced_df = pd.DataFrame(X_reduced, columns=reduced_feature_cols, index=X.index)
+    X_reduced = pd.DataFrame(selector.transform(X), columns=reduced_feature_cols, index=X.index)
     
-    # 70% Training (Trial), 20% Validation (Tune & Meta-Fit), 10% Final Holdout Test
-    n = len(X_reduced_df)
-    train_end = int(n * 0.70)
-    val_end = int(n * 0.90)
+    X_train_red = X_reduced.iloc[:train_end]
+    X_val_red = X_reduced.iloc[train_end:val_end]
+    X_test_red = X_reduced.iloc[val_end:]
     
-    X_train, y_train = X_reduced_df.iloc[:train_end], target_result.iloc[:train_end]
-    X_val, y_val = X_reduced_df.iloc[train_end:val_end], target_result.iloc[train_end:val_end]
-    X_test, y_test = X_reduced_df.iloc[val_end:], target_result.iloc[val_end:]
+    y_val = target_result.iloc[train_end:val_end]
+    y_test = target_result.iloc[val_end:]
     
     rf_model = RandomForestClassifier(
         n_estimators=n_estimators, 
@@ -337,11 +344,11 @@ def train_ml_models(df: pd.DataFrame, n_estimators: int = 100, max_depth: int = 
         max_features="sqrt",
         random_state=42
     )
-    rf_model.fit(X_train, y_train)
+    rf_model.fit(X_train_red, y_train)
     
-    train_meta_features = rf_model.predict_proba(X_train)[:, 1].reshape(-1, 1)
-    val_meta_features = rf_model.predict_proba(X_val)[:, 1].reshape(-1, 1)
-    test_meta_features = rf_model.predict_proba(X_test)[:, 1].reshape(-1, 1)
+    train_meta_features = rf_model.predict_proba(X_train_red)[:, 1].reshape(-1, 1)
+    val_meta_features = rf_model.predict_proba(X_val_red)[:, 1].reshape(-1, 1)
+    test_meta_features = rf_model.predict_proba(X_test_red)[:, 1].reshape(-1, 1)
     
     meta_model = LogisticRegression(random_state=42)
     meta_model.fit(val_meta_features, y_val)
