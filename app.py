@@ -779,7 +779,21 @@ with tab_lab:
     selected_tv_symbol = symbol_map[tv_choice]
     
     tradingview_html = f"""
-    <div class="tradingview-widget-container" style="height:620px;width:100%">
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+      html, body, .tradingview-widget-container {{
+        height: 100% !important;
+        width: 100% !important;
+        margin: 0;
+        padding: 0;
+        background-color: #0E1117;
+      }}
+    </style>
+    </head>
+    <body>
+    <div class="tradingview-widget-container" style="height:100%;width:100%">
       <div class="tradingview-widget-container__widget" style="height:calc(100% - 32px);width:100%"></div>
       <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
       {{
@@ -796,10 +810,11 @@ with tab_lab:
       }}
       </script>
     </div>
+    </body>
+    </html>
     """
     
-    # Perfectly fits on screen without squishing or awkward scrolling
-    st.components.v1.html(tradingview_html, height=650)
+    st.components.v1.html(tradingview_html, height=620, scrolling=False)
     
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("### 📈 Multi-Asset Array Co-Movement & Spread Residuals")
