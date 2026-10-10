@@ -1,6 +1,6 @@
 """
-Macro-Financial Econometric & ML Trading Terminal (10/10 Production-Grade)
-Rigorous IV2SLS Econometrics, HAC Standard Errors, and Real-Time OANDA/FRED Live Sync
+Macro-Financial Econometric & ML Trading Terminal (10/7.0-ProductionGrade)
+Rigorous IV2SLS Econometrics, HAC Standard Errors, and Publication-Quality Reporting
 """
 import sys
 from pathlib import Path
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class Settings:
     PROJECT_NAME: str = "Macro-Financial XAU/USD Institutional Terminal"
-    VERSION: str = "10.6.0-ProductionGrade"
+    VERSION: str = "10.7.0-ProductionGrade"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
     
     @property
@@ -47,7 +47,6 @@ settings = Settings()
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_timezone_telemetry() -> dict:
-    """Fetches real-time timezone telemetry."""
     try:
         response = requests.get("https://timezone.io/api/v1/timezone?zone=Asia/Manila", timeout=5)
         if response.status_code == 200:
@@ -58,7 +57,6 @@ def fetch_timezone_telemetry() -> dict:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_live_fred_series(series_id: str) -> float:
-    """Fetch live macroeconomic series directly from FRED public servers (Zero Mocking)."""
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
     try:
         df = pd.read_csv(url)
@@ -73,7 +71,6 @@ def fetch_live_fred_series(series_id: str) -> float:
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_and_align_data(symbol: str = "XAU/USD") -> pd.DataFrame:
-    """Strictly fetches live OANDA market feed via Twelve Data. Raises runtime error on failure (No Mocking)."""
     url = f"{settings.TWELVE_DATA_BASE_URL}/time_series"
     params = {
         "symbol": symbol,
@@ -227,6 +224,29 @@ def train_ml_models(df: pd.DataFrame) -> tuple[float, float]:
     
     return accuracy_score(y_te_r, log_model.predict(X_te_r)), accuracy_score(y_te_p, tree_model.predict(X_te_p))
 
+def write_report(est_res: dict, diag_res: dict) -> str:
+    df_table = est_res['table']
+    table_md = "| Parameter | Coefficient | HAC Std. Error | t-statistic | p-value |\n|---|---|---|---|---|\n"
+    for _, row in df_table.iterrows():
+        table_md += f"| {row['Parameter']} | {row['Coefficient']:.4f} | {row['HAC Std. Error']:.4f} | {row['t-statistic']:.4f} | {row['p-value']:.4f} |\n"
+
+    return f"""### INSTITUTIONAL QUANTITATIVE RESEARCH REPORT
+**Execution Standard:** Rigorous IV2SLS with Newey-West HAC Standard Errors  
+**Sample Observations (N):** {est_res['nobs']} | **RMSE:** {est_res['rmse']:.5f} | **MAE:** {est_res['mae']:.5f}
+
+#### 1. Structural Parameter Estimates
+{table_md}
+
+#### 2. Stationarity & Diagnostic Audits
+- **ADF Stationarity:** {diag_res['ADF Stationary']} (Stat: {diag_res['ADF Stat']}, p: {diag_res['ADF p-val']})
+- **KPSS Stationarity:** {diag_res['KPSS Stationary']} (Stat: {diag_res['KPSS Stat']}, p: {diag_res['KPSS p-val']})
+- **ARCH-LM Heteroskedasticity p-val:** {diag_res['ARCH-LM p-val']}
+
+#### 3. Methodological Limitations
+- Models estimated on stationary log returns to avoid spurious regression pitfalls.
+- Standard errors corrected for autocorrelation and heteroskedasticity via Newey-West HAC (maxlags=4).
+"""
+
 # --- PAGE SETUP & MOBILE-RESPONSIVE STYLING ---
 st.set_page_config(
     page_title="XAU/USD Live Institutional Terminal",
@@ -372,13 +392,14 @@ with m4:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- TABS ---
-tab_struct, tab_diag, tab_scatter, tab_forecast, tab_lab = st.tabs([
+# --- TABS (Including Publication Report) ---
+tab_struct, tab_diag, tab_scatter, tab_forecast, tab_lab, tab_report = st.tabs([
     "📊 Structural", 
     "🔍 Diagnostics", 
     "📈 Fit",
     "🎯 Alpha & Prediction", 
-    "📈 Regimes"
+    "📈 Regimes",
+    "📝 Publication Report"
 ])
 
 spec = DEFAULT_EQUATIONS[eq_choice]
@@ -492,3 +513,15 @@ with tab_lab:
     fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["close"], mode="lines", name="XAU/USD OANDA Close", line=dict(color="#d4af37", width=2)))
     fig_multi.update_layout(title="XAU/USD Live Spot Price Action", xaxis_title="Date", yaxis_title="Price ($)", template="plotly_dark", height=380, paper_bgcolor="#05070b", plot_bgcolor="#0d1117", margin=dict(l=20, r=20, t=40, b=20))
     st.plotly_chart(fig_multi, use_container_width=True)
+
+with tab_report:
+    st.markdown("### 📝 Publication-Quality Report")
+    diag_res = econometric_engine.run_diagnostics(dep_var)
+    report_md = write_report(estimation_output, diag_res)
+    st.markdown(report_md)
+    st.download_button(
+        label="Download Publication Report (.md)",
+        data=report_md,
+        file_name="XAU_USD_Institutional_Research_Report.md",
+        mime="text/markdown"
+    )
