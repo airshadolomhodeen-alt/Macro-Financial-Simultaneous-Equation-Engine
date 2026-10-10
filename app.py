@@ -624,7 +624,7 @@ with tab_lab:
 
 with tab_journal:
     st.markdown("### 📝 Trade Journal & P&L Tracker")
-    st.markdown("Log execution entries, track realized performance, and review strategy notes.")
+    st.markdown("Log execution entries, edit details directly inline, or delete rows using the data editor below.")
     
     with st.form("trade_entry_form", clear_on_submit=True):
         col_f1, col_f2, col_f3 = st.columns(3)
@@ -659,9 +659,21 @@ with tab_journal:
     
     journal_df = st.session_state.trade_journal
     if not journal_df.empty:
-        total_pnl = journal_df["PnL"].sum()
-        win_trades = journal_df[journal_df["PnL"] > 0]
-        win_rate = (len(win_trades) / len(journal_df)) * 100 if len(journal_df) > 0 else 0
+        # Using st.data_editor to allow inline cell edits and row deletions
+        edited_df = st.data_editor(
+            journal_df,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="journal_editor",
+            column_config={
+                "PnL": st.column_config.NumberColumn("Realized P&L ($)", format="$%.2f")
+            }
+        )
+        st.session_state.trade_journal = edited_df
+        
+        total_pnl = edited_df["PnL"].sum()
+        win_trades = edited_df[edited_df["PnL"] > 0]
+        win_rate = (len(win_trades) / len(edited_df)) * 100 if len(edited_df) > 0 else 0
         
         jp1, jp2, jp3 = st.columns(3)
         with jp1:
@@ -669,16 +681,7 @@ with tab_journal:
         with jp2:
             st.metric("Win Rate", f"{win_rate:.1f}%")
         with jp3:
-            st.metric("Total Trades Logged", len(journal_df))
-            
-        st.dataframe(
-            journal_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "PnL": st.column_config.NumberColumn("Realized P&L ($)", format="$%.2f")
-            }
-        )
+            st.metric("Total Trades Logged", len(edited_df))
     else:
         st.info("No trades logged yet. Use the form above to record your first execution.")
 
