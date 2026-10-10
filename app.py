@@ -56,10 +56,6 @@ settings = Settings()
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_live_macro_news(query_type: str = "USD") -> list:
-    """
-    Fetches live macro news from Alphai.io with ticker-proxy fallbacks (GLD, UUP)
-    and robust error handling.
-    """
     url = f"{settings.ALPHAI_BASE_URL}/news/"
     api_key = settings.ALPHAI_API_KEY
     
@@ -113,11 +109,12 @@ def fetch_live_fred_series(series_id: str) -> float:
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_live_asset_feed(symbol: str, exchange: str = "OANDA") -> pd.DataFrame:
+    # Increased outputsize to 5000 (maximum API limit) to maximize sample size
     url = f"{settings.TWELVE_DATA_BASE_URL}/time_series"
     params = {
         "symbol": symbol,
         "interval": "1h",
-        "outputsize": 600,
+        "outputsize": 5000,
         "exchange": exchange,
         "apikey": settings.TWELVE_DATA_API_KEY,
         "format": "json"
@@ -257,7 +254,7 @@ class EconometricEngine:
             "nobs": int(second_fit.nobs)
         }
 
-def train_ml_models(df: pd.DataFrame, n_estimators: int = 100, max_depth: int = 6) -> tuple[float, float, RandomForestClassifier, list]:
+def train_ml_models(df: pd.DataFrame, n_estimators: int = 100, max_depth: int = 6):
     feature_cols = [
         "start", "stop", "TP", "SL", 
         "zscore_spread", 
@@ -271,21 +268,32 @@ def train_ml_models(df: pd.DataFrame, n_estimators: int = 100, max_depth: int = 
     target_result = sub_df["result"]
     target_percentage = (sub_df["percentage"] > 0).astype(int)
     
-    X_tr_r, X_te_r, y_tr_r, y_te_r = train_test_split(X, target_result, test_size=0.2, random_state=42, shuffle=False)
-    X_tr_p, X_te_p, y_tr_p, y_te_p = train_test_split(X, target_percentage, test_size=0.2, random_state=42, shuffle=False)
+    # 70% Training (Trial), 20% Validation (Other Test), 10% Final Holdout Test (Chronological Split)
+    n = len(X)
+    train_end = int(n * 0.70)
+    val_end = int(n * 0.90)
     
-    rf_model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, random_state=42).fit(X_tr_r, y_tr_r)
-    tree_model = DecisionTreeClassifier(max_depth=5, random_state=42).fit(X_tr_p, y_tr_p)
+    X_train, y_train = X.iloc[:train_end], target_result.iloc[:train_end]
+    X_val, y_val = X.iloc[train_end:val_end], target_result.iloc[train_end:val_end]
+    X_test, y_test = X.iloc[val_end:], target_result.iloc[val_end:]
     
-    acc_rf = accuracy_score(y_te_r, rf_model.predict(X_te_r))
-    acc_tree = accuracy_score(y_te_p, tree_model.predict(X_te_p))
+    # Train model on 70% training set
+    rf_model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, random_state=42)
+    rf_model.fit(X_train, y_train)
     
-    return acc_rf, acc_tree, rf_model, feature_cols
+    # Evaluate performance across splits
+    val_acc = accuracy_score(y_val, rf_model.predict(X_val))
+    test_acc = accuracy_score(y_test, rf_model.predict(X_test))
+    train_acc = accuracy_score(y_train, rf_model.predict(X_train))
+    
+    return test_acc, val_acc, train_acc, rf_model, feature_cols
 
 def write_executive_master_report(
     est_res: dict, 
     diag_res: dict, 
-    acc_rf: float, 
+    test_acc: float,
+    val_acc: float,
+    train_acc: float,
     journal_df: pd.DataFrame, 
     usd_news: list, 
     xau_news: list, 
@@ -306,7 +314,7 @@ def write_executive_master_report(
     xau_summary = f"- {xau_news[0].get('title', 'Gold Event')} (Relevance: {xau_news[0].get('relevance', 'N/A')})" if xau_news else "- No active Gold catalyst alerts currently flagged in Alphai stream."
 
     return f"""### INSTITUTIONAL EXECUTIVE MASTER REPORT & SYNTHESIS
-**Execution Standard:** Multivariate IV2SLS with Newey-West HAC Standard Errors & Walk-Forward ML Alpha  
+**Execution Standard:** Multivariate IV2SLS with Newey-West HAC Standard Errors & 70/20/10 ML Architecture  
 **Sample Observations (N):** {est_res['nobs']} | **Model RMSE:** {est_res['rmse']:.5f} | **MAE:** {est_res['mae']:.5f}
 
 #### 1. Executive Summary & Live Market Context
@@ -322,9 +330,11 @@ def write_executive_master_report(
 - **KPSS Stationarity:** {diag_res['KPSS Stationary']} (Stat: {diag_res['KPSS Stat']}, p: {diag_res['KPSS p-val']})
 - **ARCH-LM Heteroskedasticity Test:** p-value = {diag_res['ARCH-LM p-val']}
 
-#### 4. Predictive Alpha & Machine Learning Consensus
-- **Random Forest Walk-Forward Accuracy:** {acc_rf * 100:.2f}%
-- **Model Alignment:** Zero look-ahead bias framework evaluating structural feature shifts against historical multi-asset regimes.
+#### 4. Predictive Alpha & 70/20/10 Split Validation
+- **Training Accuracy (70% Trial):** {train_acc * 100:.2f}%
+- **Validation Accuracy (20% Tune Test):** {val_acc * 100:.2f}%
+- **Final Holdout Test Accuracy (10% Unseen Final Test):** **{test_acc * 100:.2f}%**
+- **Architecture Validation:** Strict chronological 3-way split ensuring zero look-ahead bias and unbiased generalization on final holdout data.
 
 #### 5. Fundamental Catalyst & News Stream Synthesis
 * **USD / DXY Catalyst Stream:**
@@ -345,7 +355,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS implementing executive dark mode, typography scale, hover animations, and compact padding
 st.markdown("""
     <style>
     .stApp {
@@ -353,14 +362,12 @@ st.markdown("""
         color: #C9D1D9;
         font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
     }
-    
     .block-container {
         padding-top: 1.2rem;
         padding-bottom: 2rem;
         padding-left: 2rem;
         padding-right: 2rem;
     }
-
     .terminal-banner {
         background: linear-gradient(135deg, #161B22 0%, #0E1117 100%);
         border: 1px solid #30363D;
@@ -370,7 +377,6 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     }
-
     .metric-card {
         background-color: #161B22;
         border: 1px solid #30363D;
@@ -398,7 +404,6 @@ st.markdown("""
         font-weight: 700;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
-    
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: #161B22;
@@ -464,12 +469,12 @@ with st.sidebar:
 st.markdown("""
     <div class="terminal-banner">
         <h1 style="color: #F0F6FC; margin: 0; font-size: 20px; font-weight: 800;">INSTITUTIONAL MULTI-ASSET ECONOMETRIC TERMINAL</h1>
-        <p style="color: #8B949E; margin: 4px 0 0 0; font-size: 11px;">XAU/USD • EUR/USD • GBP/USD • DXY Synchronized &bull; Random Forest Alpha &bull; Alphai News Feeds</p>
+        <p style="color: #8B949E; margin: 4px 0 0 0; font-size: 11px;">XAU/USD • EUR/USD • GBP/USD • DXY Synchronized &bull; 70/20/10 ML Architecture &bull; Alphai News Feeds</p>
     </div>
 """, unsafe_allow_html=True)
 
 # --- TOP-LEVEL KPI TICKERS (4 Responsive Columns) ---
-acc_rf, acc_tree, rf_fitted_model, model_features = train_ml_models(engine_data, n_estimators=rf_n_estimators, max_depth=rf_max_depth)
+test_acc, val_acc, train_acc, rf_fitted_model, model_features = train_ml_models(engine_data, n_estimators=rf_n_estimators, max_depth=rf_max_depth)
 m1, m2, m3, m4 = st.columns(4)
 
 with m1:
@@ -493,9 +498,9 @@ with m2:
 with m3:
     st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-label">Random Forest Acc</div>
-            <div class="metric-val" style="color: #10B981;">{acc_rf * 100:.2f}%</div>
-            <span style="color: #8B949E; font-size: 11px;">Walk-Forward Split</span>
+            <div class="metric-label">Final Test Accuracy (10%)</div>
+            <div class="metric-val" style="color: #10B981;">{test_acc * 100:.2f}%</div>
+            <span style="color: #8B949E; font-size: 11px;">Holdout Test Set</span>
         </div>
     """, unsafe_allow_html=True)
 
@@ -606,44 +611,52 @@ with tab_scatter:
     st.plotly_chart(fig_scatter, use_container_width=True)
 
 with tab_forecast:
-    st.markdown("### 🎯 Walk-Forward Alpha Consensus & Random Forest Alignment")
-    fc1, fc2, fc3 = st.columns(3)
+    st.markdown("### 🎯 70/20/10 Train-Validation-Test Architecture & Alpha Alignment")
+    fc1, fc2, fc3, fc4 = st.columns(4)
     with fc1:
-        st.markdown("""
+        st.markdown(f"""
             <div class="metric-card">
-                <div class="metric-label">Model Consensus</div>
-                <div class="metric-val" style="color: #F85149; font-size: 16px;">BEARISH OVEREXTENSION</div>
-                <span style="color: #8B949E; font-size: 11px; font-weight: 600;">VECM Spread Z > 1.0</span>
+                <div class="metric-label">Training Acc (70%)</div>
+                <div class="metric-val" style="color: #0A84FF;">{train_acc * 100:.2f}%</div>
+                <span style="color: #8B949E; font-size: 11px;">Trial Fit Set</span>
             </div>
         """, unsafe_allow_html=True)
     with fc2:
         st.markdown(f"""
             <div class="metric-card">
-                <div class="metric-label">Random Forest Accuracy</div>
-                <div class="metric-val" style="color: #10B981;">{acc_rf * 100:.2f}%</div>
-                <span style="color: #8B949E; font-size: 11px; font-weight: 600;">Walk-Forward Split</span>
+                <div class="metric-label">Validation Acc (20%)</div>
+                <div class="metric-val" style="color: #F59E0B;">{val_acc * 100:.2f}%</div>
+                <span style="color: #8B949E; font-size: 11px;">Tune Test Set</span>
             </div>
         """, unsafe_allow_html=True)
     with fc3:
+        st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">Holdout Acc (10%)</div>
+                <div class="metric-val" style="color: #10B981;">{test_acc * 100:.2f}%</div>
+                <span style="color: #8B949E; font-size: 11px;">Final Unseen Test</span>
+            </div>
+        """, unsafe_allow_html=True)
+    with fc4:
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Framework</div>
-                <div class="metric-val" style="font-size: 16px; color: #0A84FF;">Ensemble RF</div>
-                <span style="color: #10B981; font-size: 11px; font-weight: 600;">Zero Look-Ahead Bias</span>
+                <div class="metric-val" style="font-size: 15px; color: #0A84FF;">3-Way Split</div>
+                <span style="color: #10B981; font-size: 11px;">Zero Leakage</span>
             </div>
         """, unsafe_allow_html=True)
         
     st.markdown("<br>", unsafe_allow_html=True)
     col_f_left, col_f_right = st.columns(2)
     with col_f_left:
-        fig_prob = go.Figure(data=[go.Bar(x=["UP", "DOWN", "NEUTRAL"], y=[35.0, acc_rf * 100, 10.0], marker_color=["#10B981", "#F85149", "#8B949E"])])
+        fig_prob = go.Figure(data=[go.Bar(x=["Train (70%)", "Val (20%)", "Test (10%)"], y=[train_acc * 100, val_acc * 100, test_acc * 100], marker_color=["#0A84FF", "#F59E0B", "#10B981"])])
         fig_prob.update_layout(
-            title="Forecast Probability Distribution", 
+            title="Split Accuracy Comparison", 
             template="plotly_dark", 
             height=320, 
             paper_bgcolor="rgba(0,0,0,0)", 
             plot_bgcolor="rgba(0,0,0,0)", 
-            yaxis_title="Probability (%)", 
+            yaxis_title="Accuracy (%)", 
             margin=dict(l=20, r=20, t=40, b=20)
         )
         st.plotly_chart(fig_prob, use_container_width=True)
@@ -786,7 +799,7 @@ with tab_news:
 
 with tab_report:
     st.markdown("### 📝 Institutional Executive Master Report & Synthesis")
-    st.markdown("Comprehensive executive synthesis combining econometric estimation, diagnostic audits, predictive machine learning alpha, trade journal P&L performance, and live fundamental news streams.")
+    st.markdown("Comprehensive executive synthesis combining econometric estimation, diagnostic audits, 70/20/10 machine learning split validation, trade journal P&L performance, and live fundamental news streams.")
     
     diag_res = econometric_engine.run_diagnostics(dep_var)
     usd_news_list = fetch_live_macro_news("USD")
@@ -796,7 +809,9 @@ with tab_report:
     executive_report_md = write_executive_master_report(
         estimation_output, 
         diag_res, 
-        acc_rf, 
+        test_acc,
+        val_acc,
+        train_acc,
         st.session_state.trade_journal, 
         usd_news_list, 
         xau_news_list, 
