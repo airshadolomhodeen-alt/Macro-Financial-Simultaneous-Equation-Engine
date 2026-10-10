@@ -101,6 +101,17 @@ class Settings:
 
 settings = Settings()
 
+# Define DEFAULT_EQUATIONS early before usage
+DEFAULT_EQUATIONS = {
+    "Multi-Asset Gold Equilibrium (Model 1)": {
+        "dependent": "log_return_xau_usd",
+        "endogenous": ["log_return_dxy", "log_return_eur_usd"],
+        "exogenous": ["fed_funds_surprise"],
+        "instruments": ["instrument_z"],
+        "description": "Multivariate IV-2SLS modeling XAU/USD returns against DXY and EUR/USD with HAC correction."[cite: 1]
+    }
+}
+
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_live_macro_news(query_type: str = "USD") -> list:
     url = f"{settings.ALPHAI_BASE_URL}/news/"
@@ -196,16 +207,6 @@ def process_institutional_features(df: pd.DataFrame) -> pd.DataFrame:
     df["fed_funds_surprise"] = df["log_return_dxy"].shift(1)[cite: 1]
     
     return df.dropna()
-
-DEFAULT_EQUATIONS = {
-    "Multi-Asset Gold Equilibrium (Model 1)": {
-        "dependent": "log_return_xau_usd",
-        "endogenous": ["log_return_dxy", "log_return_eur_usd"],
-        "exogenous": ["fed_funds_surprise"],
-        "instruments": ["instrument_z"],
-        "description": "Multivariate IV-2SLS modeling XAU/USD returns against DXY and EUR/USD with HAC correction."[cite: 1]
-    }
-}
 
 class EconometricEngine:
     def __init__(self, data: pd.DataFrame):
