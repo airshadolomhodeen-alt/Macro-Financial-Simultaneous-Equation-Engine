@@ -279,26 +279,58 @@ def train_ml_models(df: pd.DataFrame) -> tuple[float, float]:
     
     return accuracy_score(y_te_r, rf_model.predict(X_te_r)), accuracy_score(y_te_p, tree_model.predict(X_te_p))
 
-def write_report(est_res: dict, diag_res: dict) -> str:
+def write_executive_master_report(
+    est_res: dict, 
+    diag_res: dict, 
+    acc_rf: float, 
+    journal_df: pd.DataFrame, 
+    usd_news: list, 
+    xau_news: list, 
+    live_xau: float, 
+    live_fed_rate: float, 
+    zscore: float
+) -> str:
     df_table = est_res['table']
     table_md = "| Parameter | Coefficient | HAC Std. Error | t-statistic | p-value |\n|---|---|---|---|---|\n"
     for _, row in df_table.iterrows():
         table_md += f"| {row['Parameter']} | {row['Coefficient']:.4f} | {row['HAC Std. Error']:.4f} | {row['t-statistic']:.4f} | {row['p-value']:.4f} |\n"
 
-    return f"""### INSTITUTIONAL QUANTITATIVE RESEARCH REPORT
-**Execution Standard:** Multivariate IV2SLS with Newey-West HAC Standard Errors  
-**Sample Observations (N):** {est_res['nobs']} | **RMSE:** {est_res['rmse']:.5f} | **MAE:** {est_res['mae']:.5f}
+    total_pnl = journal_df["PnL"].sum() if not journal_df.empty else 0.0
+    total_trades = len(journal_df)
+    win_rate = (len(journal_df[journal_df["PnL"] > 0]) / total_trades * 100) if total_trades > 0 else 0.0
 
-#### 1. Structural Parameter Estimates
+    usd_summary = f"- {usd_news[0].get('title', 'USD Event')} (Relevance: {usd_news[0].get('relevance', 'N/A')})" if usd_news else "- No active USD catalyst alerts currently flagged in Alphai stream."
+    xau_summary = f"- {xau_news[0].get('title', 'Gold Event')} (Relevance: {xau_news[0].get('relevance', 'N/A')})" if xau_news else "- No active Gold catalyst alerts currently flagged in Alphai stream."
+
+    return f"""### INSTITUTIONAL EXECUTIVE MASTER REPORT & SYNTHESIS
+**Execution Standard:** Multivariate IV2SLS with Newey-West HAC Standard Errors & Walk-Forward ML Alpha  
+**Sample Observations (N):** {est_res['nobs']} | **Model RMSE:** {est_res['rmse']:.5f} | **MAE:** {est_res['mae']:.5f}
+
+#### 1. Executive Summary & Live Market Context
+- **Spot Gold (XAU/USD):** ${live_xau:,.3f} | **Fed Funds Rate (FRED):** {live_fed_rate:.2f}%
+- **VECM Spread Z-Score:** {zscore:.2f} (Quantifies multi-asset cointegration residual valuation state).
+- **Trade Journal & P&L Audit:** Realized P&L: **${total_pnl:,.2f}** across **{total_trades}** logged executions (Win Rate: **{win_rate:.1f}%**).
+
+#### 2. Structural Econometric Parameter Estimates (IV-2SLS)
 {table_md}
 
-#### 2. Stationarity & Diagnostic Audits
+#### 3. Stationarity, Cointegration & Diagnostic Audits
 - **ADF Stationarity:** {diag_res['ADF Stationary']} (Stat: {diag_res['ADF Stat']}, p: {diag_res['ADF p-val']})
 - **KPSS Stationarity:** {diag_res['KPSS Stationary']} (Stat: {diag_res['KPSS Stat']}, p: {diag_res['KPSS p-val']})
-- **ARCH-LM Heteroskedasticity p-val:** {diag_res['ARCH-LM p-val']}
+- **ARCH-LM Heteroskedasticity Test:** p-value = {diag_res['ARCH-LM p-val']}
 
-#### 3. Methodological Compliance
-- Multi-asset cointegration residuals (VECM) incorporated into feature set.
+#### 4. Predictive Alpha & Machine Learning Consensus
+- **Random Forest Walk-Forward Accuracy:** {acc_rf * 100:.2f}%
+- **Model Alignment:** Zero look-ahead bias framework evaluating structural feature shifts against historical multi-asset regimes.
+
+#### 5. Fundamental Catalyst & News Stream Synthesis
+* **USD / DXY Catalyst Stream:**
+  {usd_summary}
+* **Gold (XAU) Catalyst Stream:**
+  {xau_summary}
+
+#### 6. Methodological Compliance & Sign-Off
+- Cointegration residuals (VECM) incorporated into feature set.
 - Standard errors corrected for autocorrelation and heteroskedasticity via Newey-West HAC (maxlags=4).
 """
 
@@ -659,7 +691,6 @@ with tab_journal:
     
     journal_df = st.session_state.trade_journal
     if not journal_df.empty:
-        # Using st.data_editor to allow inline cell edits and row deletions
         edited_df = st.data_editor(
             journal_df,
             use_container_width=True,
@@ -714,14 +745,31 @@ with tab_news:
             st.info("No active Gold news items returned for current filters. Check Streamlit secrets key authorization.")
 
 with tab_report:
-    st.markdown("### 📝 Institutional Research Report")
+    st.markdown("### 📝 Institutional Executive Master Report & Synthesis")
+    st.markdown("Comprehensive executive synthesis combining econometric estimation, diagnostic audits, predictive machine learning alpha, trade journal P&L performance, and live fundamental news streams.")
+    
     diag_res = econometric_engine.run_diagnostics(dep_var)
-    report_md = write_report(estimation_output, diag_res)
-    st.markdown(report_md)
+    usd_news_list = fetch_live_macro_news("USD")
+    xau_news_list = fetch_live_macro_news("XAU")
+    zscore_current = float(engine_data['zscore_spread'].iloc[-1])
+    
+    executive_report_md = write_executive_master_report(
+        estimation_output, 
+        diag_res, 
+        acc_rf, 
+        st.session_state.trade_journal, 
+        usd_news_list, 
+        xau_news_list, 
+        live_xau, 
+        live_fed_rate, 
+        zscore_current
+    )
+    
+    st.markdown(executive_report_md)
     st.download_button(
-        label="Download Institutional Report (.md)",
-        data=report_md,
-        file_name="Institutional_MultiAsset_Report.md",
+        label="Download Executive Master Report (.md)",
+        data=executive_report_md,
+        file_name="Institutional_Executive_Master_Report.md",
         mime="text/markdown",
         use_container_width=True
     )
