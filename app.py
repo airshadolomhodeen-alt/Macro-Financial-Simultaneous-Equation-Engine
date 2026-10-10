@@ -143,12 +143,13 @@ def fetch_live_fred_series(series_id: str) -> float:
             return float(df[value_col].iloc[-1])
     except Exception as e:
         logger.error(f"FRED fetch failed for {series_id}: {e}")
-    return 4.50 # Robust macroeconomic fallback
+    return 4.50
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_live_asset_feed(symbol: str, exchange: str = "OANDA") -> pd.DataFrame:
     url = f"{settings.TWELVE_DATA_BASE_URL}/time_series"
     params = {"symbol": symbol, "interval": "1h", "outputsize": 1500, "exchange": exchange, "apikey": settings.TWELVE_DATA_API_KEY, "format": "json"}
+    col_clean = symbol.replace("/", "_")
     try:
         response = requests.get(url, params=params, timeout=8)
         data = response.json()
@@ -159,43 +160,37 @@ def load_live_asset_feed(symbol: str, exchange: str = "OANDA") -> pd.DataFrame:
             for col in ["open", "high", "low", "close"]:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors="coerce")
-            return df[["open", "high", "low", "close"]].rename(columns={
-                "open": f"{symbol.replace('/', '_')}_open",
-                "high": f"{symbol.replace('/', '_')}_high",
-                "low": f"{symbol.replace('/', '_')}_low",
-                "close": symbol.replace("/", "_")
-            })
+            return df[["close"]].rename(columns={"close": col_clean})
         else:
             raise RuntimeError(data.get('message', 'API rate limit or invalid symbol'))
     except Exception as e:
         logger.warning(f"Live feed warning for {symbol}: {e}. Generating synthetic simulation feed.")
-        # Fallback synthetic institutional time series for offline/testing mode
         dates = pd.date_range(end=datetime.now(), periods=1000, freq="h")
         base_val = 2000.0 if "XAU" in symbol else (1.08 if "EUR" in symbol else (1.25 if "GBP" in symbol else 104.0))
         np.random.seed(42 if "XAU" in symbol else (43 if "EUR" in symbol else 44))
         prices = base_val + np.cumsum(np.random.normal(0, base_val * 0.001, len(dates)))
-        df = pd.DataFrame({
-            f"{symbol.replace('/', '_')}_open": prices * 0.999,
-            f"{symbol.replace('/', '_')}_high": prices * 1.002,
-            f"{symbol.replace('/', '_')}_low": prices * 0.998,
-            f"{symbol.replace('/', '_')}": prices
-        }, index=dates)
-        return df
+        return pd.DataFrame({col_clean: prices}, index=dates)
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_multi_asset_matrix() -> pd.DataFrame:
     xau = load_live_asset_feed("XAU/USD", "OANDA")
     eur = load_live_asset_feed("EUR/USD", "OANDA")
     gbp = load_live_asset_feed("GBP/USD", "OANDA")
-    dxy = eur.copy().rename(columns={"EUR_USD": "DXY"})
-    dxy["DXY"] = 1.0 / dxy["EUR_USD"] * 110.0
+    
+    dxy = eur.copy()
+    if "EUR_USD" in dxy.columns:
+        dxy["DXY"] = 1.0 / dxy["EUR_USD"] * 110.0
+        dxy = dxy[["DXY"]]
+    else:
+        dxy["DXY"] = 104.0
+        dxy = dxy[["DXY"]]
+        
     combined = pd.concat([xau, eur, gbp, dxy], axis=1).resample("1h").last().dropna()
     return process_institutional_features(combined)
 
 def process_institutional_features(df: pd.DataFrame) -> pd.DataFrame:
-    for col in ["XAU_USD", "EUR_USD", "GBP_USD", "DXY"]:
-        if col in df.columns:
-            df[f"log_return_{col.lower()}"] = np.log(df[col] / df[col].shift(1))
+    for col in df.columns:
+        df[f"log_return_{col.lower()}"] = np.log(df[col] / df[col].shift(1))
     
     df["corr_xau_eur"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_eur_usd"]).shift(1)
     df["corr_xau_dxy"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_dxy"]).shift(1)
