@@ -302,16 +302,91 @@ def write_report(est_res: dict, diag_res: dict) -> str:
 - Standard errors corrected for autocorrelation and heteroskedasticity via Newey-West HAC (maxlags=4).
 """
 
-# --- PAGE SETUP & STYLING ---
-st.set_page_config(page_title="Institutional Multi-Asset Terminal", page_icon="⚡", layout="wide")
+# --- PAGE SETUP & EXECUTIVE THEME INJECTION ---
+st.set_page_config(
+    page_title="Institutional Multi-Asset Terminal", 
+    page_icon="⚡", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# Custom CSS implementing executive dark mode, typography hierarchy, and card hover animations
 st.markdown("""
     <style>
-    .stApp { background-color: #05070b; color: #e6edf3; }
-    .terminal-header { background: #0d1117; border: 1px solid #30363d; border-left: 4px solid #d4af37; padding: 14px; border-radius: 6px; margin-bottom: 15px; }
-    .metric-card { background: #0d1117; border: 1px solid #21262d; padding: 12px; border-radius: 6px; }
-    .metric-label { color: #8b949e; font-size: 9px; font-weight: 700; text-transform: uppercase; }
-    .metric-val { color: #f0f6fc; font-size: 17px; font-weight: 800; font-family: monospace; }
+    /* Executive Theme Color System & Typography */
+    .stApp {
+        background-color: #0E1117;
+        color: #C9D1D9;
+        font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    
+    /* Optimize vertical layout real estate */
+    .block-container {
+        padding-top: 1.2rem;
+        padding-bottom: 2rem;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+
+    /* Executive Top Header Banner */
+    .executive-banner {
+        background: linear-gradient(135deg, #161B22 0%, #0E1117 100%);
+        border: 1px solid #30363D;
+        border-left: 4px solid #0A84FF;
+        padding: 20px 24px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Enhanced KPI Metric Cards with Interactive Hover States */
+    .metric-card {
+        background-color: #161B22;
+        border: 1px solid #30363D;
+        padding: 18px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
+        border-color: #0A84FF;
+        box-shadow: 0 6px 16px rgba(10, 132, 255, 0.15);
+    }
+    .metric-label {
+        color: #8B949E;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 6px;
+    }
+    .metric-val {
+        color: #F0F6FC;
+        font-size: 22px;
+        font-weight: 700;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    
+    /* Streamlit Tab Customizations */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #161B22;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid #30363D;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 38px;
+        border-radius: 6px;
+        color: #8B949E;
+        font-weight: 600;
+        font-size: 13px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #0A84FF !important;
+        color: #FFFFFF !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -330,7 +405,7 @@ live_gbp = float(engine_data["GBP_USD"].iloc[-1])
 live_dxy = float(engine_data["DXY"].iloc[-1])
 pct_xau = float(((engine_data["XAU_USD"].iloc[-1] - engine_data["XAU_USD"].iloc[-2]) / engine_data["XAU_USD"].iloc[-2]) * 100)
 
-# --- SIDEBAR DESK ---
+# --- SIDEBAR DESK CONTROLS ---
 with st.sidebar:
     st.markdown("### ⚡ MULTI-ASSET TRADING DESK")
     eq_choice = st.selectbox("Structural Model", list(DEFAULT_EQUATIONS.keys()))
@@ -338,57 +413,62 @@ with st.sidebar:
     st.markdown(f"**Live Observations:** `{len(engine_data)}`")
     st.markdown(f"**Execution Standard:** `Random Forest + VECM`")
     
-    if st.button("🔄 Force Refresh Live Feeds"):
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🔄 Force Refresh Live Feeds", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
-# --- HEADER TITLE ---
+# --- TOP HEADER BANNER ---
 st.markdown("""
-    <div class="terminal-header">
-        <h1 style="color: #f0f6fc; margin: 0; font-size: 20px; font-weight: 800;">INSTITUTIONAL MULTI-ASSET ECONOMETRIC TERMINAL</h1>
-        <p style="color: #8b949e; margin: 2px 0 0 0; font-size: 11px;">XAU/USD • EUR/USD • GBP/USD • DXY Synchronized • Random Forest Alpha • Alphai News Feeds</p>
+    <div class="executive-banner">
+        <h1 style="color: #F0F6FC; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em;">INSTITUTIONAL MULTI-ASSET ECONOMETRIC TERMINAL</h1>
+        <p style="color: #8B949E; margin: 4px 0 0 0; font-size: 12px; font-weight: 500;">XAU/USD • EUR/USD • GBP/USD • DXY Synchronized &bull; Random Forest Alpha &bull; Alphai News Feeds</p>
     </div>
 """, unsafe_allow_html=True)
 
-# --- METRIC TICKERS ---
+# --- TOP-LEVEL KPI RIBBON (4 Responsive Columns) ---
 acc_rf, acc_tree = train_ml_models(engine_data)
 m1, m2, m3, m4 = st.columns(4)
+
 with m1:
     st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">XAU/USD Live</div>
             <div class="metric-val">${live_xau:,.3f}</div>
-            <span style="color: {'#3fb950' if pct_xau >= 0 else '#f85149'}; font-size: 10px; font-weight: 600;">{pct_xau:+,.2f}%</span>
+            <span style="color: {'#10B981' if pct_xau >= 0 else '#F85149'}; font-size: 11px; font-weight: 600;">{pct_xau:+,.2f}% 24h</span>
         </div>
     """, unsafe_allow_html=True)
+
 with m2:
     st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">Spread Z-Score</div>
-            <div class="metric-val" style="color: #58a6ff;">{engine_data['zscore_spread'].iloc[-1]:.2f}</div>
-            <span style="color: #8b949e; font-size: 10px;">VECM Residual</span>
+            <div class="metric-val" style="color: #0A84FF;">{engine_data['zscore_spread'].iloc[-1]:.2f}</div>
+            <span style="color: #8B949E; font-size: 11px;">VECM Residual</span>
         </div>
     """, unsafe_allow_html=True)
+
 with m3:
     st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">Random Forest Acc</div>
-            <div class="metric-val" style="color: #3fb950;">{acc_rf * 100:.2f}%</div>
-            <span style="color: #8b949e; font-size: 10px;">Walk-Forward</span>
+            <div class="metric-val" style="color: #10B981;">{acc_rf * 100:.2f}%</div>
+            <span style="color: #8B949E; font-size: 11px;">Walk-Forward Split</span>
         </div>
     """, unsafe_allow_html=True)
+
 with m4:
     st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">Fed Funds Rate</div>
-            <div class="metric-val">{live_fed_rate:.2f}%</div>
-            <span style="color: #3fb950; font-size: 10px;">FRED Live</span>
+            <div class="metric-val" style="color: #F59E0B;">{live_fed_rate:.2f}%</div>
+            <span style="color: #10B981; font-size: 11px;">FRED Live Sync</span>
         </div>
     """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# --- TABS ---
+# --- INTERACTIVE TABBED WORKSPACE ---
 tab_struct, tab_diag, tab_scatter, tab_forecast, tab_lab, tab_news, tab_report = st.tabs([
     "📊 Structural", 
     "🔍 Diagnostics", 
@@ -412,7 +492,19 @@ with tab_struct:
     col_left, col_right = st.columns([1.4, 1])
     with col_left:
         st.markdown("### 🔬 Multivariate Structural Estimation (IV-2SLS with HAC SE)")
-        st.dataframe(results_table.round(4), use_container_width=True, hide_index=True)
+        # Enhanced interactive data table with column config
+        st.dataframe(
+            results_table.round(4), 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Parameter": st.column_config.TextColumn("Parameter", width="medium"),
+                "Coefficient": st.column_config.NumberColumn("Coefficient", format="%.4f"),
+                "HAC Std. Error": st.column_config.NumberColumn("HAC Std. Error", format="%.4f"),
+                "t-statistic": st.column_config.NumberColumn("t-statistic", format="%.4f"),
+                "p-value": st.column_config.NumberColumn("p-value", format="%.4f"),
+            }
+        )
     with col_right:
         st.markdown("### 🧠 Decision Matrix & Performance")
         st.info(f"""
@@ -431,24 +523,24 @@ with tab_diag:
         st.markdown(f"""
             <div class="metric-card">
                 <div class="metric-label">ADF Stationary</div>
-                <div class="metric-val" style="color: #3fb950;">{diag_res['ADF Stationary']}</div>
-                <span style="color: #8b949e; font-size: 10px;">p-val: {diag_res['ADF p-val']}</span>
+                <div class="metric-val" style="color: #10B981;">{diag_res['ADF Stationary']}</div>
+                <span style="color: #8B949E; font-size: 11px;">p-val: {diag_res['ADF p-val']}</span>
             </div>
         """, unsafe_allow_html=True)
     with d2:
         st.markdown(f"""
             <div class="metric-card">
                 <div class="metric-label">KPSS Stationary</div>
-                <div class="metric-val" style="color: #3fb950;">{diag_res['KPSS Stationary']}</div>
-                <span style="color: #8b949e; font-size: 10px;">p-val: {diag_res['KPSS p-val']}</span>
+                <div class="metric-val" style="color: #10B981;">{diag_res['KPSS Stationary']}</div>
+                <span style="color: #8B949E; font-size: 11px;">p-val: {diag_res['KPSS p-val']}</span>
             </div>
         """, unsafe_allow_html=True)
     with d3:
         st.markdown(f"""
             <div class="metric-card">
                 <div class="metric-label">ARCH-LM Test</div>
-                <div class="metric-val" style="color: #3fb950;">p = {diag_res['ARCH-LM p-val']}</div>
-                <span style="color: #8b949e; font-size: 10px;">Heteroskedasticity Audited</span>
+                <div class="metric-val" style="color: #0A84FF;">p = {diag_res['ARCH-LM p-val']}</div>
+                <span style="color: #8B949E; font-size: 11px;">Heteroskedasticity Audited</span>
             </div>
         """, unsafe_allow_html=True)
 
@@ -462,12 +554,12 @@ with tab_scatter:
     ols_preds = ols_fit.predict(sm.add_constant(x_vals))
     
     fig_scatter = go.Figure()
-    fig_scatter.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='markers', name='Live Returns', marker=dict(color='#58a6ff', size=6, opacity=0.8)))
-    fig_scatter.add_trace(go.Scatter(x=x_vals, y=ols_preds, mode='lines', name='OLS Baseline', line=dict(color='#8b949e', width=2, dash='dash')))
+    fig_scatter.add_trace(go.Scatter(x=x_vals, y=y_vals, mode='markers', name='Live Returns', marker=dict(color='#0A84FF', size=6, opacity=0.8)))
+    fig_scatter.add_trace(go.Scatter(x=x_vals, y=ols_preds, mode='lines', name='OLS Baseline', line=dict(color='#8B949E', width=2, dash='dash')))
     fig_scatter.update_layout(
         title=f"Fit: {dep_var} vs {x_reg_name}",
         xaxis_title=x_reg_name, yaxis_title=dep_var, template="plotly_dark", height=400,
-        paper_bgcolor="#05070b", plot_bgcolor="#0d1117", margin=dict(l=20, r=20, t=40, b=20)
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(l=20, r=20, t=40, b=20)
     )
     st.plotly_chart(fig_scatter, use_container_width=True)
 
@@ -478,38 +570,55 @@ with tab_forecast:
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Model Consensus</div>
-                <div class="metric-val" style="color: #f85149;">BEARISH OVEREXTENSION</div>
-                <span style="color: #8b949e; font-size: 10px; font-weight: 600;">VECM Spread Z > 1.0</span>
+                <div class="metric-val" style="color: #F85149; font-size: 16px;">BEARISH OVEREXTENSION</div>
+                <span style="color: #8B949E; font-size: 11px; font-weight: 600;">VECM Spread Z > 1.0</span>
             </div>
         """, unsafe_allow_html=True)
     with fc2:
         st.markdown(f"""
             <div class="metric-card">
                 <div class="metric-label">Random Forest Accuracy</div>
-                <div class="metric-val">{acc_rf * 100:.2f}%</div>
-                <span style="color: #8b949e; font-size: 10px; font-weight: 600;">Walk-Forward Split</span>
+                <div class="metric-val" style="color: #10B981;">{acc_rf * 100:.2f}%</div>
+                <span style="color: #8B949E; font-size: 11px; font-weight: 600;">Walk-Forward Split</span>
             </div>
         """, unsafe_allow_html=True)
     with fc3:
         st.markdown("""
             <div class="metric-card">
                 <div class="metric-label">Framework</div>
-                <div class="metric-val" style="font-size: 14px;">Ensemble RF</div>
-                <span style="color: #3fb950; font-size: 10px; font-weight: 600;">Zero Look-Ahead Bias</span>
+                <div class="metric-val" style="font-size: 16px; color: #0A84FF;">Ensemble RF</div>
+                <span style="color: #10B981; font-size: 11px; font-weight: 600;">Zero Look-Ahead Bias</span>
             </div>
         """, unsafe_allow_html=True)
         
     st.markdown("<br>", unsafe_allow_html=True)
-    fig_prob = go.Figure(data=[go.Bar(x=["UP", "DOWN", "NEUTRAL"], y=[35.0, acc_rf * 100, 10.0], marker_color=["#3fb950", "#f85149", "#8b949e"])])
-    fig_prob.update_layout(title="Forecast Probability Distribution", template="plotly_dark", height=320, paper_bgcolor="#05070b", plot_bgcolor="#0d1117", yaxis_title="Probability (%)", margin=dict(l=20, r=20, t=40, b=20))
+    fig_prob = go.Figure(data=[go.Bar(x=["UP", "DOWN", "NEUTRAL"], y=[35.0, acc_rf * 100, 10.0], marker_color=["#10B981", "#F85149", "#8B949E"])])
+    fig_prob.update_layout(
+        title="Forecast Probability Distribution", 
+        template="plotly_dark", 
+        height=320, 
+        paper_bgcolor="rgba(0,0,0,0)", 
+        plot_bgcolor="rgba(0,0,0,0)", 
+        yaxis_title="Probability (%)", 
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
     st.plotly_chart(fig_prob, use_container_width=True)
 
 with tab_lab:
     st.markdown("### 📈 Multi-Asset Array Co-Movement & Spread Residuals")
     fig_multi = go.Figure()
-    fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["XAU_USD"], mode="lines", name="XAU/USD", line=dict(color="#d4af37", width=2)))
-    fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["EUR_USD"] * 3800, mode="lines", name="EUR/USD (Scaled)", line=dict(color="#58a6ff", width=1.5, dash="dot")))
-    fig_multi.update_layout(title="XAU/USD vs EUR/USD Co-Movement", xaxis_title="Date", yaxis_title="Level ($)", template="plotly_dark", height=380, paper_bgcolor="#05070b", plot_bgcolor="#0d1117", margin=dict(l=20, r=20, t=40, b=20))
+    fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["XAU_USD"], mode="lines", name="XAU/USD", line=dict(color="#F59E0B", width=2)))
+    fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["EUR_USD"] * 3800, mode="lines", name="EUR/USD (Scaled)", line=dict(color="#0A84FF", width=1.5, dash="dot")))
+    fig_multi.update_layout(
+        title="XAU/USD vs EUR/USD Co-Movement", 
+        xaxis_title="Date", 
+        yaxis_title="Level ($)", 
+        template="plotly_dark", 
+        height=380, 
+        paper_bgcolor="rgba(0,0,0,0)", 
+        plot_bgcolor="rgba(0,0,0,0)", 
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
     st.plotly_chart(fig_multi, use_container_width=True)
 
 with tab_news:
@@ -524,7 +633,7 @@ with tab_news:
                 title = item.get('title', item.get('headline', 'Macro News Event'))
                 rel = item.get('relevance', item.get('score', 'N/A'))
                 source = item.get('source', item.get('publisher', 'Alphai'))
-                st.markdown(f"- **{title}**  \n  <span style='color: #8b949e; font-size: 11px;'>Source: {source} | Relevance Score: {rel}</span>", unsafe_allow_html=True)
+                st.markdown(f"- **{title}**  \n  <span style='color: #8B949E; font-size: 11px;'>Source: {source} | Relevance Score: {rel}</span>", unsafe_allow_html=True)
         else:
             st.info("No active USD news items returned for current filters. Check Streamlit secrets key authorization.")
             
@@ -536,7 +645,7 @@ with tab_news:
                 title = item.get('title', item.get('headline', 'Gold Macro Catalyst'))
                 rel = item.get('relevance', item.get('score', 'N/A'))
                 source = item.get('source', item.get('publisher', 'Alphai'))
-                st.markdown(f"- **{title}**  \n  <span style='color: #8b949e; font-size: 11px;'>Source: {source} | Relevance Score: {rel}</span>", unsafe_allow_html=True)
+                st.markdown(f"- **{title}**  \n  <span style='color: #8B949E; font-size: 11px;'>Source: {source} | Relevance Score: {rel}</span>", unsafe_allow_html=True)
         else:
             st.info("No active Gold news items returned for current filters. Check Streamlit secrets key authorization.")
 
@@ -549,5 +658,6 @@ with tab_report:
         label="Download Institutional Report (.md)",
         data=report_md,
         file_name="Institutional_MultiAsset_Report.md",
-        mime="text/markdown"
+        mime="text/markdown",
+        use_container_width=True
     )
