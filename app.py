@@ -20,7 +20,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score
-import joblib
 
 ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
@@ -56,18 +55,46 @@ class Settings:
 settings = Settings()
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_live_macro_news(symbol: str = "USD") -> list:
-    """Fetches live ticker-tagged fundamental news from Alphai.io."""
+def fetch_live_macro_news(query_type: str = "USD") -> list:
+    """
+    Fetches live macro news from Alphai.io with ticker-proxy fallbacks (GLD, UUP)
+    and robust error handling.
+    """
     url = f"{settings.ALPHAI_BASE_URL}/news/"
-    headers = {"Authorization": f"Bearer {settings.ALPHAI_API_KEY}"}
-    params = {"symbol": symbol, "min_relevance": 0.5}
-    try:
-        response = requests.get(url, headers=headers, params=params, timeout=8)
-        if response.status_code == 200:
-            data = response.json()
-            return data if isinstance(data, list) else data.get("results", [])
-    except Exception as e:
-        logger.error(f"Failed to fetch news for {symbol}: {e}")
+    api_key = settings.ALPHAI_API_KEY
+    
+    if not api_key:
+        logger.warning("Alphai API key is missing from secrets.")
+        return []
+        
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    ticker_map = {
+        "USD": ["UUP", "DX-Y.NYB", "USD"],
+        "XAU": ["GLD", "IAU", "GC=F", "XAU"]
+    }
+    
+    symbols_to_try = ticker_map.get(query_type, [query_type])
+    
+    for symbol in symbols_to_try:
+        params = {
+            "symbol": symbol,
+            "min_relevance": 0.1,
+            "limit": 5
+        }
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=8)
+            if response.status_code == 200:
+                data = response.json()
+                results = data if isinstance(data, list) else data.get("results", data.get("data", []))
+                if results and len(results) > 0:
+                    return results
+            elif response.status_code == 401:
+                logger.error("Alphai API key unauthorized. Check secrets configuration.")
+                return []
+        except Exception as e:
+            logger.error(f"Failed news fetch for {symbol}: {e}")
+            
     return []
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -488,23 +515,30 @@ with tab_lab:
 with tab_news:
     st.markdown("### 📰 Live Macroeconomic & Asset News Feeds (Alphai)")
     col_n1, col_n2 = st.columns(2)
+    
     with col_n1:
         st.markdown("#### 💵 USD / DXY Catalyst Stream")
         usd_news = fetch_live_macro_news("USD")
         if usd_news:
             for item in usd_news[:5]:
-                st.markdown(f"- **{item.get('title', 'Headline')}**  \n  <span style='color: #8b949e; font-size: 11px;'>Relevance: {item.get('relevance', 'N/A')}</span>", unsafe_allow_html=True)
+                title = item.get('title', item.get('headline', 'Macro News Event'))
+                rel = item.get('relevance', item.get('score', 'N/A'))
+                source = item.get('source', item.get('publisher', 'Alphai'))
+                st.markdown(f"- **{title}**  \n  <span style='color: #8b949e; font-size: 11px;'>Source: {source} | Relevance Score: {rel}</span>", unsafe_allow_html=True)
         else:
-            st.info("No live USD news items returned or rate limit reached.")
+            st.info("No active USD news items returned for current filters. Check Streamlit secrets key authorization.")
             
     with col_n2:
         st.markdown("#### 🥇 Gold (XAU) Catalyst Stream")
         xau_news = fetch_live_macro_news("XAU")
         if xau_news:
             for item in xau_news[:5]:
-                st.markdown(f"- **{item.get('title', 'Headline')}**  \n  <span style='color: #8b949e; font-size: 11px;'>Relevance: {item.get('relevance', 'N/A')}</span>", unsafe_allow_html=True)
+                title = item.get('title', item.get('headline', 'Gold Macro Catalyst'))
+                rel = item.get('relevance', item.get('score', 'N/A'))
+                source = item.get('source', item.get('publisher', 'Alphai'))
+                st.markdown(f"- **{title}**  \n  <span style='color: #8b949e; font-size: 11px;'>Source: {source} | Relevance Score: {rel}</span>", unsafe_allow_html=True)
         else:
-            st.info("No live XAU news items returned or rate limit reached.")
+            st.info("No active Gold news items returned for current filters. Check Streamlit secrets key authorization.")
 
 with tab_report:
     st.markdown("### 📝 Institutional Research Report")
