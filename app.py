@@ -257,7 +257,7 @@ class EconometricEngine:
             "nobs": int(second_fit.nobs)
         }
 
-def train_ml_models(df: pd.DataFrame) -> tuple[float, float]:
+def train_ml_models(df: pd.DataFrame, n_estimators: int = 100, max_depth: int = 6) -> tuple[float, float, RandomForestClassifier, list]:
     feature_cols = [
         "start", "stop", "TP", "SL", 
         "zscore_spread", 
@@ -274,10 +274,13 @@ def train_ml_models(df: pd.DataFrame) -> tuple[float, float]:
     X_tr_r, X_te_r, y_tr_r, y_te_r = train_test_split(X, target_result, test_size=0.2, random_state=42, shuffle=False)
     X_tr_p, X_te_p, y_tr_p, y_te_p = train_test_split(X, target_percentage, test_size=0.2, random_state=42, shuffle=False)
     
-    rf_model = RandomForestClassifier(n_estimators=100, max_depth=6, random_state=42).fit(X_tr_r, y_tr_r)
+    rf_model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, random_state=42).fit(X_tr_r, y_tr_r)
     tree_model = DecisionTreeClassifier(max_depth=5, random_state=42).fit(X_tr_p, y_tr_p)
     
-    return accuracy_score(y_te_r, rf_model.predict(X_te_r)), accuracy_score(y_te_p, tree_model.predict(X_te_p))
+    acc_rf = accuracy_score(y_te_r, rf_model.predict(X_te_r))
+    acc_tree = accuracy_score(y_te_p, tree_model.predict(X_te_p))
+    
+    return acc_rf, acc_tree, rf_model, feature_cols
 
 def write_executive_master_report(
     est_res: dict, 
@@ -442,6 +445,12 @@ pct_xau = float(((engine_data["XAU_USD"].iloc[-1] - engine_data["XAU_USD"].iloc[
 with st.sidebar:
     st.markdown("### ⚡ MULTI-ASSET TRADING DESK")
     eq_choice = st.selectbox("Structural Model", list(DEFAULT_EQUATIONS.keys()))
+    
+    st.markdown("---")
+    st.markdown("### ⚙️ Random Forest Tuning")
+    rf_n_estimators = st.slider("Number of Estimators", min_value=50, max_value=300, value=100, step=50)
+    rf_max_depth = st.slider("Max Tree Depth", min_value=2, max_value=15, value=6, step=1)
+    
     st.markdown("---")
     st.markdown(f"**Live Observations:** `{len(engine_data)}`")
     st.markdown(f"**Execution Standard:** `Random Forest + VECM`")
@@ -460,7 +469,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- TOP-LEVEL KPI TICKERS (4 Responsive Columns) ---
-acc_rf, acc_tree = train_ml_models(engine_data)
+acc_rf, acc_tree, rf_fitted_model, model_features = train_ml_models(engine_data, n_estimators=rf_n_estimators, max_depth=rf_max_depth)
 m1, m2, m3, m4 = st.columns(4)
 
 with m1:
@@ -625,17 +634,38 @@ with tab_forecast:
         """, unsafe_allow_html=True)
         
     st.markdown("<br>", unsafe_allow_html=True)
-    fig_prob = go.Figure(data=[go.Bar(x=["UP", "DOWN", "NEUTRAL"], y=[35.0, acc_rf * 100, 10.0], marker_color=["#10B981", "#F85149", "#8B949E"])])
-    fig_prob.update_layout(
-        title="Forecast Probability Distribution", 
-        template="plotly_dark", 
-        height=320, 
-        paper_bgcolor="rgba(0,0,0,0)", 
-        plot_bgcolor="rgba(0,0,0,0)", 
-        yaxis_title="Probability (%)", 
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
-    st.plotly_chart(fig_prob, use_container_width=True)
+    col_f_left, col_f_right = st.columns(2)
+    with col_f_left:
+        fig_prob = go.Figure(data=[go.Bar(x=["UP", "DOWN", "NEUTRAL"], y=[35.0, acc_rf * 100, 10.0], marker_color=["#10B981", "#F85149", "#8B949E"])])
+        fig_prob.update_layout(
+            title="Forecast Probability Distribution", 
+            template="plotly_dark", 
+            height=320, 
+            paper_bgcolor="rgba(0,0,0,0)", 
+            plot_bgcolor="rgba(0,0,0,0)", 
+            yaxis_title="Probability (%)", 
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        st.plotly_chart(fig_prob, use_container_width=True)
+    with col_f_right:
+        importances = rf_fitted_model.feature_importances_
+        sorted_indices = np.argsort(importances)
+        fig_fi = go.Figure(data=[go.Bar(
+            y=[model_features[i] for i in sorted_indices],
+            x=[importances[i] for i in sorted_indices],
+            orientation='h',
+            marker_color='#0A84FF'
+        )])
+        fig_fi.update_layout(
+            title="Random Forest Feature Importance", 
+            template="plotly_dark", 
+            height=320, 
+            paper_bgcolor="rgba(0,0,0,0)", 
+            plot_bgcolor="rgba(0,0,0,0)", 
+            xaxis_title="Relative Importance Score", 
+            margin=dict(l=20, r=20, t=40, b=20)
+        )
+        st.plotly_chart(fig_fi, use_container_width=True)
 
 with tab_lab:
     st.markdown("### 📈 Multi-Asset Array Co-Movement & Spread Residuals")
@@ -706,12 +736,22 @@ with tab_journal:
         win_trades = edited_df[edited_df["PnL"] > 0]
         win_rate = (len(win_trades) / len(edited_df)) * 100 if len(edited_df) > 0 else 0
         
-        jp1, jp2, jp3 = st.columns(3)
+        if len(edited_df) > 1 and edited_df["PnL"].std() > 0:
+            returns = edited_df["PnL"] / 1000.0
+            rf_daily = (live_fed_rate / 100.0) / 252.0
+            excess_returns = returns - rf_daily
+            sharpe_ratio = (excess_returns.mean() / excess_returns.std()) * np.sqrt(252)
+        else:
+            sharpe_ratio = 0.0
+            
+        jp1, jp2, jp3, jp4 = st.columns(4)
         with jp1:
             st.metric("Total Realized P&L", f"${total_pnl:,.2f}")
         with jp2:
             st.metric("Win Rate", f"{win_rate:.1f}%")
         with jp3:
+            st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
+        with jp4:
             st.metric("Total Trades Logged", len(edited_df))
     else:
         st.info("No trades logged yet. Use the form above to record your first execution.")
