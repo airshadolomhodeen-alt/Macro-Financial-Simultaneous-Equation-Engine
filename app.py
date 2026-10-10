@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 DB_PATH = "institutional_terminal.db"
 
 def init_db():
-    """Initializes the SQLite database and creates the trade journal table if it doesn't exist."""[cite: 1]
+    """Initializes the SQLite database and creates the trade journal table if it doesn't exist."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -51,7 +51,7 @@ def init_db():
     conn.close()
 
 def load_trades_from_db() -> pd.DataFrame:
-    """Loads all logged trades from the SQLite database into a pandas DataFrame."""[cite: 1]
+    """Loads all logged trades from the SQLite database into a pandas DataFrame."""
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query(
         "SELECT date as Date, asset as Asset, direction as Direction, entry as Entry, exit as Exit, pnl as PnL, notes as Notes FROM trade_journal", 
@@ -65,7 +65,7 @@ def load_trades_from_db() -> pd.DataFrame:
     return df
 
 def insert_trade_to_db(trade_date, asset, direction, entry, exit_price, pnl, notes):
-    """Inserts a new trade execution record into the SQLite database."""[cite: 1]
+    """Inserts a new trade execution record into the SQLite database."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -101,14 +101,14 @@ class Settings:
 
 settings = Settings()
 
-# Define DEFAULT_EQUATIONS early before usage
+# Define DEFAULT_EQUATIONS cleanly without any citation artifacts
 DEFAULT_EQUATIONS = {
     "Multi-Asset Gold Equilibrium (Model 1)": {
         "dependent": "log_return_xau_usd",
         "endogenous": ["log_return_dxy", "log_return_eur_usd"],
         "exogenous": ["fed_funds_surprise"],
         "instruments": ["instrument_z"],
-        "description": "Multivariate IV-2SLS modeling XAU/USD returns against DXY and EUR/USD with HAC correction."[cite: 1]
+        "description": "Multivariate IV-2SLS modeling XAU/USD returns against DXY and EUR/USD with HAC correction."
     }
 }
 
@@ -167,10 +167,10 @@ def load_live_asset_feed(symbol: str, exchange: str = "OANDA") -> pd.DataFrame:
                 "close": symbol.replace("/", "_")
             })
         else:
-            raise RuntimeError(data.get('message', 'API rate limit or invalid symbol'))[cite: 1]
+            raise RuntimeError(data.get('message', 'API rate limit or invalid symbol'))
     except Exception as e:
         logger.error(f"Failed to fetch {symbol}: {e}")
-        raise RuntimeError(f"Critical Feed Failure for {symbol}: {e}")[cite: 1]
+        raise RuntimeError(f"Critical Feed Failure for {symbol}: {e}")
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_multi_asset_matrix() -> pd.DataFrame:
@@ -185,35 +185,35 @@ def load_multi_asset_matrix() -> pd.DataFrame:
 def process_institutional_features(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["XAU_USD", "EUR_USD", "GBP_USD", "DXY"]:
         if col in df.columns:
-            df[f"log_return_{col.lower()}"] = np.log(df[col] / df[col].shift(1))[cite: 1]
+            df[f"log_return_{col.lower()}"] = np.log(df[col] / df[col].shift(1))
     
-    df["corr_xau_eur"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_eur_usd"]).shift(1)[cite: 1]
-    df["corr_xau_dxy"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_dxy"]).shift(1)[cite: 1]
+    df["corr_xau_eur"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_eur_usd"]).shift(1)
+    df["corr_xau_dxy"] = df["log_return_xau_usd"].rolling(60).corr(df["log_return_dxy"]).shift(1)
     
-    df["spread_residual"] = df["XAU_USD"] - (1.25 * df["EUR_USD"] + 1.10 * df["GBP_USD"])[cite: 1]
-    df["zscore_spread"] = ((df["spread_residual"] - df["spread_residual"].rolling(50).mean()) / df["spread_residual"].rolling(50).std()).shift(1)[cite: 1]
+    df["spread_residual"] = df["XAU_USD"] - (1.25 * df["EUR_USD"] + 1.10 * df["GBP_USD"])
+    df["zscore_spread"] = ((df["spread_residual"] - df["spread_residual"].rolling(50).mean()) / df["spread_residual"].rolling(50).std()).shift(1)
     
-    df["start"] = df["XAU_USD"].shift(1)[cite: 1]
-    df["stop"] = df["XAU_USD"].shift(2)[cite: 1]
-    rolling_std = df["XAU_USD"].rolling(window=14).std().shift(1).bfill()[cite: 1]
-    df["TP"] = df["start"] + (2.0 * rolling_std)[cite: 1]
-    df["SL"] = df["start"] - (1.0 * rolling_std)[cite: 1]
+    df["start"] = df["XAU_USD"].shift(1)
+    df["stop"] = df["XAU_USD"].shift(2)
+    rolling_std = df["XAU_USD"].rolling(window=14).std().shift(1).bfill()
+    df["TP"] = df["start"] + (2.0 * rolling_std)
+    df["SL"] = df["start"] - (1.0 * rolling_std)
     
-    df["future_return"] = df["XAU_USD"].shift(-10) - df["XAU_USD"][cite: 1]
-    df["result"] = (df["future_return"] > 0).astype(int)[cite: 1]
-    df["percentage"] = (df["future_return"] / df["XAU_USD"]) * 100[cite: 1]
+    df["future_return"] = df["XAU_USD"].shift(-10) - df["XAU_USD"]
+    df["result"] = (df["future_return"] > 0).astype(int)
+    df["percentage"] = (df["future_return"] / df["XAU_USD"]) * 100
     
-    df["instrument_z"] = df["log_return_eur_usd"].shift(1)[cite: 1]
-    df["fed_funds_surprise"] = df["log_return_dxy"].shift(1)[cite: 1]
+    df["instrument_z"] = df["log_return_eur_usd"].shift(1)
+    df["fed_funds_surprise"] = df["log_return_dxy"].shift(1)
     
     return df.dropna()
 
 class EconometricEngine:
     def __init__(self, data: pd.DataFrame):
-        self.data = data[cite: 1]
+        self.data = data
 
     def run_diagnostics(self, series_name: str) -> dict:
-        series = self.data[series_name].dropna()[cite: 1]
+        series = self.data[series_name].dropna()
         adf_res = adfuller(series)
         kpss_res = kpss(series, regression="c", nlags="auto")
         arch_res = het_arch(series)
@@ -232,23 +232,23 @@ class EconometricEngine:
         Y = self.data[dep_var]
         X_endog = self.data[endog_vars]
         X_exog = self.data[exog_vars] if exog_vars else None
-        Z_inst = self.data[instruments][cite: 1]
+        Z_inst = self.data[instruments]
         
-        inst_full = sm.add_constant(pd.concat([X_exog, Z_inst], axis=1) if X_exog is not None else Z_inst)[cite: 1]
+        inst_full = sm.add_constant(pd.concat([X_exog, Z_inst], axis=1) if X_exog is not None else Z_inst)
         X_hat = np.empty_like(X_endog)
         fs_results = {}
         for i, col in enumerate(endog_vars):
             fs_fit = sm.OLS(X_endog[col], inst_full).fit(cov_type="HAC", cov_kwds={"maxlags": 4})
             X_hat[:, i] = fs_fit.fittedvalues
             f_stat = fs_fit.f_test(np.eye(len(inst_full.columns))[1:])
-            fs_results[col] = {"r_squared": round(fs_fit.rsquared, 4), "f_stat": round(float(f_stat.fvalue), 2), "p_value": round(float(f_stat.pvalue), 4)}[cite: 1]
+            fs_results[col] = {"r_squared": round(fs_fit.rsquared, 4), "f_stat": round(float(f_stat.fvalue), 2), "p_value": round(float(f_stat.pvalue), 4)}
             
-        X_second_df = pd.DataFrame(X_hat, columns=endog_vars, index=self.data.index)[cite: 1]
+        X_second_df = pd.DataFrame(X_hat, columns=endog_vars, index=self.data.index)
         if X_exog is not None:
             for col in exog_vars:
-                X_second_df[col] = self.data[col][cite: 1]
-        X_second = sm.add_constant(X_second_df)[cite: 1]
-        second_fit = sm.OLS(Y, X_second).fit(cov_type="HAC", cov_kwds={"maxlags": 4})[cite: 1]
+                X_second_df[col] = self.data[col]
+        X_second = sm.add_constant(X_second_df)
+        second_fit = sm.OLS(Y, X_second).fit(cov_type="HAC", cov_kwds={"maxlags": 4})
         
         results_df = pd.DataFrame({
             "Parameter": second_fit.params.index,
@@ -257,66 +257,66 @@ class EconometricEngine:
             "t-statistic": second_fit.tvalues.values,
             "p-value": second_fit.pvalues.values,
             "Model": "Proper 2SLS (HAC)"
-        })[cite: 1]
+        })
         
         preds = second_fit.predict(X_second)
         rmse = np.sqrt(np.mean((Y - preds) ** 2))
-        mae = np.mean(np.abs(Y - preds))[cite: 1]
-        return {"model_fit": second_fit, "table": results_df, "first_stage": fs_results, "rmse": rmse, "mae": mae, "nobs": int(second_fit.nobs)}[cite: 1]
+        mae = np.mean(np.abs(Y - preds))
+        return {"model_fit": second_fit, "table": results_df, "first_stage": fs_results, "rmse": rmse, "mae": mae, "nobs": int(second_fit.nobs)}
 
 def train_ml_models(df: pd.DataFrame, n_estimators: int = 100, max_depth: int = 6, min_samples_split: int = 10, min_samples_leaf: int = 2):
     feature_cols = ["start", "stop", "TP", "SL", "zscore_spread", "corr_xau_eur", "log_return_dxy", "log_return_eur_usd"]
-    sub_df = df[feature_cols + ["result", "percentage"]].dropna()[cite: 1]
+    sub_df = df[feature_cols + ["result", "percentage"]].dropna()
     X = sub_df[feature_cols]
-    target_result = sub_df["result"][cite: 1]
+    target_result = sub_df["result"]
     
     n = len(X)
     train_end = int(n * 0.70)
-    val_end = int(n * 0.90)[cite: 1]
+    val_end = int(n * 0.90)
     
     X_train = X.iloc[:train_end]
-    y_train = target_result.iloc[:train_end][cite: 1]
+    y_train = target_result.iloc[:train_end]
     
     prelim_rf = RandomForestClassifier(n_estimators=50, max_depth=max_depth, random_state=42)
-    prelim_rf.fit(X_train, y_train)[cite: 1]
+    prelim_rf.fit(X_train, y_train)
     
     selector = SelectFromModel(prelim_rf, threshold="mean", prefit=True)
     selected_feature_mask = selector.get_support()
     reduced_feature_cols = [col for col, keep in zip(feature_cols, selected_feature_mask) if keep]
-    pruned_feature_cols = [col for col, keep in zip(feature_cols, selected_feature_mask) if not keep][cite: 1]
+    pruned_feature_cols = [col for col, keep in zip(feature_cols, selected_feature_mask) if not keep]
     
-    X_reduced = pd.DataFrame(selector.transform(X), columns=reduced_feature_cols, index=X.index)[cite: 1]
+    X_reduced = pd.DataFrame(selector.transform(X), columns=reduced_feature_cols, index=X.index)
     X_train_red = X_reduced.iloc[:train_end]
     X_val_red = X_reduced.iloc[train_end:val_end]
     X_test_red = X_reduced.iloc[val_end:]
     y_val = target_result.iloc[train_end:val_end]
-    y_test = target_result.iloc[val_end:][cite: 1]
+    y_test = target_result.iloc[val_end:]
     
     rf_model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, min_samples_split=min_samples_split, min_samples_leaf=min_samples_leaf, max_features="sqrt", random_state=42)
-    rf_model.fit(X_train_red, y_train)[cite: 1]
+    rf_model.fit(X_train_red, y_train)
     
     train_meta_features = rf_model.predict_proba(X_train_red)[:, 1].reshape(-1, 1)
     val_meta_features = rf_model.predict_proba(X_val_red)[:, 1].reshape(-1, 1)
-    test_meta_features = rf_model.predict_proba(X_test_red)[:, 1].reshape(-1, 1)[cite: 1]
+    test_meta_features = rf_model.predict_proba(X_test_red)[:, 1].reshape(-1, 1)
     
     meta_model = LogisticRegression(random_state=42)
-    meta_model.fit(val_meta_features, y_val)[cite: 1]
+    meta_model.fit(val_meta_features, y_val)
     
     train_acc = accuracy_score(y_train, meta_model.predict(train_meta_features))
     val_acc = accuracy_score(y_val, meta_model.predict(val_meta_features))
-    test_acc = accuracy_score(y_test, meta_model.predict(test_meta_features))[cite: 1]
-    return test_acc, val_acc, train_acc, rf_model, meta_model, reduced_feature_cols, pruned_feature_cols[cite: 1]
+    test_acc = accuracy_score(y_test, meta_model.predict(test_meta_features))
+    return test_acc, val_acc, train_acc, rf_model, meta_model, reduced_feature_cols, pruned_feature_cols
 
 def write_executive_master_report(est_res: dict, diag_res: dict, test_acc: float, val_acc: float, train_acc: float, journal_df: pd.DataFrame, usd_news: list, xau_news: list, live_xau: float, live_fed_rate: float, zscore: float, retained_features: list, pruned_features: list) -> str:
     df_table = est_res['table']
     table_md = "| Parameter | Coefficient | HAC Std. Error | t-statistic | p-value |\n|---|---|---|---|---|\n"
     for _, row in df_table.iterrows():
-        table_md += f"| {row['Parameter']} | {row['Coefficient']:.4f} | {row['HAC Std. Error']:.4f} | {row['t-statistic']:.4f} | {row['p-value']:.4f} |\n"[cite: 1]
+        table_md += f"| {row['Parameter']} | {row['Coefficient']:.4f} | {row['HAC Std. Error']:.4f} | {row['t-statistic']:.4f} | {row['p-value']:.4f} |\n"
     total_pnl = journal_df["PnL"].sum() if not journal_df.empty else 0.0
     total_trades = len(journal_df)
-    win_rate = (len(journal_df[journal_df["PnL"] > 0]) / total_trades * 100) if total_trades > 0 else 0.0[cite: 1]
-    usd_summary = f"- {usd_news[0].get('title', 'USD Event')} (Relevance: {usd_news[0].get('relevance', 'N/A')})" if usd_news else "- No active USD catalyst alerts."[cite: 1]
-    xau_summary = f"- {xau_news[0].get('title', 'Gold Event')} (Relevance: {xau_news[0].get('relevance', 'N/A')})" if xau_news else "- No active Gold catalyst alerts."[cite: 1]
+    win_rate = (len(journal_df[journal_df["PnL"] > 0]) / total_trades * 100) if total_trades > 0 else 0.0
+    usd_summary = f"- {usd_news[0].get('title', 'USD Event')} (Relevance: {usd_news[0].get('relevance', 'N/A')})" if usd_news else "- No active USD catalyst alerts."
+    xau_summary = f"- {xau_news[0].get('title', 'Gold Event')} (Relevance: {xau_news[0].get('relevance', 'N/A')})" if xau_news else "- No active Gold catalyst alerts."
     return f"""### INSTITUTIONAL EXECUTIVE MASTER REPORT & SYNTHESIS
 **Execution Standard:** Multivariate IV2SLS with Newey-West HAC Standard Errors & Stacked 70/20/10 ML Architecture (MCDA Verified 10/10)  
 **Sample Observations (N):** {est_res['nobs']} | **Model RMSE:** {est_res['rmse']:.5f} | **MAE:** {est_res['mae']:.5f}
@@ -338,10 +338,10 @@ def write_executive_master_report(est_res: dict, diag_res: dict, test_acc: float
 - **Training Accuracy (70%):** {train_acc * 100:.2f}%
 - **Validation Accuracy (20%):** {val_acc * 100:.2f}%
 - **Final Holdout Test Accuracy (10%):** **{test_acc * 100:.2f}%**
-"""[cite: 1]
+"""
 
 # --- PAGE SETUP & UI/UX STYLING ---
-st.set_page_config(page_title="Institutional Multi-Asset Terminal", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")[cite: 1]
+st.set_page_config(page_title="Institutional Multi-Asset Terminal", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
@@ -356,38 +356,38 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { height: 38px; border-radius: 6px; color: #929DB0; font-weight: 600; font-size: 13px; }
     .stTabs [aria-selected="true"] { background-color: #4C8DFF !important; color: #FFFFFF !important; }
     </style>
-""", unsafe_allow_html=True)[cite: 1]
+""", unsafe_allow_html=True)
 
 init_db()
-journal_df = load_trades_from_db()[cite: 1]
+journal_df = load_trades_from_db()
 
 try:
     engine_data = load_multi_asset_matrix()
     econometric_engine = EconometricEngine(engine_data)
-    live_fed_rate = fetch_live_fred_series("FEDFUNDS")[cite: 1]
+    live_fed_rate = fetch_live_fred_series("FEDFUNDS")
 except Exception as e:
-    st.error(f"🚨 Live Data Ingestion Halted: {e}")[cite: 1]
-    st.stop()[cite: 1]
+    st.error(f"🚨 Live Data Ingestion Halted: {e}")
+    st.stop()
 
 live_xau = float(engine_data["XAU_USD"].iloc[-1])
 live_eur = float(engine_data["EUR_USD"].iloc[-1])
 live_gbp = float(engine_data["GBP_USD"].iloc[-1])
 live_dxy = float(engine_data["DXY"].iloc[-1])
-pct_xau = float(((engine_data["XAU_USD"].iloc[-1] - engine_data["XAU_USD"].iloc[-2]) / engine_data["XAU_USD"].iloc[-2]) * 100)[cite: 1]
+pct_xau = float(((engine_data["XAU_USD"].iloc[-1] - engine_data["XAU_USD"].iloc[-2]) / engine_data["XAU_USD"].iloc[-2]) * 100)
 
 # --- SIDEBAR DESK CONTROLS ---
 with st.sidebar:
     st.markdown("### ⚡ MULTI-ASSET TRADING DESK")
-    eq_choice = st.selectbox("Structural Model", list(DEFAULT_EQUATIONS.keys()))[cite: 1]
+    eq_choice = st.selectbox("Structural Model", list(DEFAULT_EQUATIONS.keys()))
     st.markdown("---")
     st.markdown("### ⚙️ Random Forest Regularization")
     rf_n_estimators = st.slider("Number of Estimators", 50, 300, 100, 50)
     rf_max_depth = st.slider("Max Tree Depth", 2, 15, 6, 1)
     rf_min_samples_split = st.slider("Min Samples Split", 2, 50, 10, 2)
-    rf_min_samples_leaf = st.slider("Min Samples Leaf", 1, 30, 2, 1)[cite: 1]
+    rf_min_samples_leaf = st.slider("Min Samples Leaf", 1, 30, 2, 1)
     st.markdown("---")
     st.markdown(f"**Live Observations:** `{len(engine_data)}`")
-    st.markdown(f"**MCDA Rating:** `10.0 / 10 (Optimal)`")[cite: 1]
+    st.markdown(f"**MCDA Rating:** `10.0 / 10 (Optimal)`")
     if st.button("🔄 Force Refresh Live Feeds", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
@@ -398,12 +398,12 @@ st.markdown("""
         <h1 style="color: #E8EDF5; margin: 0; font-size: 20px; font-weight: 800;">INSTITUTIONAL QUANT ENGINE — XAU/USD TERMINAL</h1>
         <p style="color: #929DB0; margin: 4px 0 0 0; font-size: 11px;">XAU/USD • EUR/USD • GBP/USD • DXY Synchronized &bull; 70/20/10 Stacked Architecture &bull; SQLite Persistence &bull; MCDA 10/10</p>
     </div>
-""", unsafe_allow_html=True)[cite: 1]
+""", unsafe_allow_html=True)
 
 # --- EXECUTIVE 6-CARD KPI OVERVIEW ---
 test_acc, val_acc, train_acc, rf_fitted_model, meta_fitted_model, model_features, pruned_features = train_ml_models(
     engine_data, n_estimators=rf_n_estimators, max_depth=rf_max_depth, min_samples_split=rf_min_samples_split, min_samples_leaf=rf_min_samples_leaf
-)[cite: 1]
+)
 
 k1, k2, k3, k4, k5, k6 = st.columns(6)
 with k1:
