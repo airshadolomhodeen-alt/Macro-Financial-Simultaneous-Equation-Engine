@@ -1,6 +1,6 @@
 """
 Macro-Financial Multi-Asset & Econometric Trading Terminal (10.10.0-InstitutionalGrade)
-Rigorous IV2SLS/VECM Econometrics, HAC Standard Errors, and Random Forest Walk-Forward Alpha
+Rigorous IV2SLS/VECM Econometrics, HAC Standard Errors, Random Forest Alpha & Alphai Live News Feeds
 """
 import sys
 from pathlib import Path
@@ -33,6 +33,7 @@ class Settings:
     PROJECT_NAME: str = "Institutional Multi-Asset Econometric Terminal"
     VERSION: str = "10.10.0-InstitutionalGrade"
     TWELVE_DATA_BASE_URL: str = "https://api.twelvedata.com"
+    ALPHAI_BASE_URL: str = "https://api.alphai.io/api"
     
     @property
     def TWELVE_DATA_API_KEY(self) -> str:
@@ -41,19 +42,33 @@ class Settings:
                 return st.secrets["api"]["twelve_data_key"]
         except Exception:
             pass
-        return os.getenv("TWELVE_DATA_API_KEY", "32b6a749e8c14835b95b8a9c271eec95")
+        return os.getenv("TWELVE_DATA_API_KEY", "")
+
+    @property
+    def ALPHAI_API_KEY(self) -> str:
+        try:
+            if "api" in st.secrets and "alphai_key" in st.secrets["api"]:
+                return st.secrets["api"]["alphai_key"]
+        except Exception:
+            pass
+        return os.getenv("ALPHAI_API_KEY", "")
 
 settings = Settings()
 
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_timezone_telemetry() -> dict:
+def fetch_live_macro_news(symbol: str = "USD") -> list:
+    """Fetches live ticker-tagged fundamental news from Alphai.io."""
+    url = f"{settings.ALPHAI_BASE_URL}/news/"
+    headers = {"Authorization": f"Bearer {settings.ALPHAI_API_KEY}"}
+    params = {"symbol": symbol, "min_relevance": 0.5}
     try:
-        response = requests.get("https://timezone.io/api/v1/timezone?zone=Asia/Manila", timeout=5)
+        response = requests.get(url, headers=headers, params=params, timeout=8)
         if response.status_code == 200:
-            return response.json()
-    except Exception:
-        pass
-    return {"status": "fallback", "offset": "+08:00"}
+            data = response.json()
+            return data if isinstance(data, list) else data.get("results", [])
+    except Exception as e:
+        logger.error(f"Failed to fetch news for {symbol}: {e}")
+    return []
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_live_fred_series(series_id: str) -> float:
@@ -100,7 +115,6 @@ def load_live_asset_feed(symbol: str, exchange: str = "OANDA") -> pd.DataFrame:
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_multi_asset_matrix() -> pd.DataFrame:
-    """Strictly fetches live multi-asset array with robust live DXY proxy derivation."""
     xau = load_live_asset_feed("XAU/USD", "OANDA")
     eur = load_live_asset_feed("EUR/USD", "OANDA")
     gbp = load_live_asset_feed("GBP/USD", "OANDA")
@@ -217,7 +231,6 @@ class EconometricEngine:
         }
 
 def train_ml_models(df: pd.DataFrame) -> tuple[float, float]:
-    """Enhanced walk-forward pipeline with Random Forest classifier and VECM features."""
     feature_cols = [
         "start", "stop", "TP", "SL", 
         "zscore_spread", 
@@ -306,7 +319,7 @@ with st.sidebar:
 st.markdown("""
     <div class="terminal-header">
         <h1 style="color: #f0f6fc; margin: 0; font-size: 20px; font-weight: 800;">INSTITUTIONAL MULTI-ASSET ECONOMETRIC TERMINAL</h1>
-        <p style="color: #8b949e; margin: 2px 0 0 0; font-size: 11px;">XAU/USD • EUR/USD • GBP/USD • DXY Synchronized • Random Forest Alpha • HAC Standard Errors</p>
+        <p style="color: #8b949e; margin: 2px 0 0 0; font-size: 11px;">XAU/USD • EUR/USD • GBP/USD • DXY Synchronized • Random Forest Alpha • Alphai News Feeds</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -349,12 +362,13 @@ with m4:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # --- TABS ---
-tab_struct, tab_diag, tab_scatter, tab_forecast, tab_lab, tab_report = st.tabs([
+tab_struct, tab_diag, tab_scatter, tab_forecast, tab_lab, tab_news, tab_report = st.tabs([
     "📊 Structural", 
     "🔍 Diagnostics", 
     "📈 Fit",
     "🎯 Alpha & Prediction", 
     "📈 Multi-Asset Regimes",
+    "📰 News & Fundamentals",
     "📝 Publication Report"
 ])
 
@@ -470,6 +484,27 @@ with tab_lab:
     fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["EUR_USD"] * 3800, mode="lines", name="EUR/USD (Scaled)", line=dict(color="#58a6ff", width=1.5, dash="dot")))
     fig_multi.update_layout(title="XAU/USD vs EUR/USD Co-Movement", xaxis_title="Date", yaxis_title="Level ($)", template="plotly_dark", height=380, paper_bgcolor="#05070b", plot_bgcolor="#0d1117", margin=dict(l=20, r=20, t=40, b=20))
     st.plotly_chart(fig_multi, use_container_width=True)
+
+with tab_news:
+    st.markdown("### 📰 Live Macroeconomic & Asset News Feeds (Alphai)")
+    col_n1, col_n2 = st.columns(2)
+    with col_n1:
+        st.markdown("#### 💵 USD / DXY Catalyst Stream")
+        usd_news = fetch_live_macro_news("USD")
+        if usd_news:
+            for item in usd_news[:5]:
+                st.markdown(f"- **{item.get('title', 'Headline')}**  \n  <span style='color: #8b949e; font-size: 11px;'>Relevance: {item.get('relevance', 'N/A')}</span>", unsafe_allow_html=True)
+        else:
+            st.info("No live USD news items returned or rate limit reached.")
+            
+    with col_n2:
+        st.markdown("#### 🥇 Gold (XAU) Catalyst Stream")
+        xau_news = fetch_live_macro_news("XAU")
+        if xau_news:
+            for item in xau_news[:5]:
+                st.markdown(f"- **{item.get('title', 'Headline')}**  \n  <span style='color: #8b949e; font-size: 11px;'>Relevance: {item.get('relevance', 'N/A')}</span>", unsafe_allow_html=True)
+        else:
+            st.info("No live XAU news items returned or rate limit reached.")
 
 with tab_report:
     st.markdown("### 📝 Institutional Research Report")
