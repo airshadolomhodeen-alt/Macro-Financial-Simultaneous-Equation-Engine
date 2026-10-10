@@ -304,13 +304,13 @@ def write_report(est_res: dict, diag_res: dict) -> str:
 
 # --- PAGE SETUP & EXECUTIVE THEME SYSTEM ---
 st.set_page_config(
-    page_title="Institutional Multi-Asset Econometric Terminal", 
+    page_title="Institutional Multi-Asset Terminal", 
     page_icon="⚡", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Executive dark mode palette and UI polish
+# Custom CSS implementing executive dark mode, typography scale, hover animations, and compact padding
 st.markdown("""
     <style>
     .stApp {
@@ -391,7 +391,7 @@ if "trade_journal" not in st.session_state:
         "Date", "Asset", "Direction", "Entry", "Exit", "PnL", "Notes"
     ])
 
-# Live Data Ingestion
+# Strict Live Data Ingestion
 try:
     engine_data = load_multi_asset_matrix()
     econometric_engine = EconometricEngine(engine_data)
@@ -611,4 +611,114 @@ with tab_lab:
     fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["XAU_USD"], mode="lines", name="XAU/USD", line=dict(color="#F59E0B", width=2)))
     fig_multi.add_trace(go.Scatter(x=engine_data.index, y=engine_data["EUR_USD"] * 3800, mode="lines", name="EUR/USD (Scaled)", line=dict(color="#0A84FF", width=1.5, dash="dot")))
     fig_multi.update_layout(
-        title="XAU/USD vs EUR/USD Co-Movement",
+        title="XAU/USD vs EUR/USD Co-Movement", 
+        xaxis_title="Date", 
+        yaxis_title="Level ($)", 
+        template="plotly_dark", 
+        height=380, 
+        paper_bgcolor="rgba(0,0,0,0)", 
+        plot_bgcolor="rgba(0,0,0,0)", 
+        margin=dict(l=20, r=20, t=40, b=20)
+    )
+    st.plotly_chart(fig_multi, use_container_width=True)
+
+with tab_journal:
+    st.markdown("### 📝 Trade Journal & P&L Tracker")
+    st.markdown("Log execution entries, track realized performance, and review strategy notes.")
+    
+    with st.form("trade_entry_form", clear_on_submit=True):
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            trade_date = st.date_input("Trade Date", datetime.now())
+            asset_choice = st.selectbox("Asset", ["XAU/USD", "EUR/USD", "GBP/USD", "DXY"])
+        with col_f2:
+            direction = st.selectbox("Direction", ["LONG", "SHORT"])
+            entry_price = st.number_input("Entry Price", value=0.00, format="%.4f")
+        with col_f3:
+            exit_price = st.number_input("Exit Price", value=0.00, format="%.4f")
+            pnl_amount = st.number_input("Realized P&L ($)", value=0.00, format="%.2f")
+            
+        notes = st.text_input("Execution Notes / Strategy Setup Rationale")
+        submitted = st.form_submit_button("💾 Log Trade Entry", use_container_width=True)
+        
+        if submitted:
+            new_row = pd.DataFrame([{
+                "Date": trade_date,
+                "Asset": asset_choice,
+                "Direction": direction,
+                "Entry": entry_price,
+                "Exit": exit_price,
+                "PnL": pnl_amount,
+                "Notes": notes
+            }])
+            st.session_state.trade_journal = pd.concat([st.session_state.trade_journal, new_row], ignore_index=True)
+            st.success("Trade successfully logged to session journal!")
+
+    st.markdown("---")
+    st.markdown("#### 📊 Performance Analytics & Execution History")
+    
+    journal_df = st.session_state.trade_journal
+    if not journal_df.empty:
+        total_pnl = journal_df["PnL"].sum()
+        win_trades = journal_df[journal_df["PnL"] > 0]
+        win_rate = (len(win_trades) / len(journal_df)) * 100 if len(journal_df) > 0 else 0
+        
+        jp1, jp2, jp3 = st.columns(3)
+        with jp1:
+            st.metric("Total Realized P&L", f"${total_pnl:,.2f}")
+        with jp2:
+            st.metric("Win Rate", f"{win_rate:.1f}%")
+        with jp3:
+            st.metric("Total Trades Logged", len(journal_df))
+            
+        st.dataframe(
+            journal_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "PnL": st.column_config.NumberColumn("Realized P&L ($)", format="$%.2f")
+            }
+        )
+    else:
+        st.info("No trades logged yet. Use the form above to record your first execution.")
+
+with tab_news:
+    st.markdown("### 📰 Live Macroeconomic & Asset News Feeds (Alphai)")
+    col_n1, col_n2 = st.columns(2)
+    
+    with col_n1:
+        st.markdown("#### 💵 USD / DXY Catalyst Stream")
+        usd_news = fetch_live_macro_news("USD")
+        if usd_news:
+            for item in usd_news[:5]:
+                title = item.get('title', item.get('headline', 'Macro News Event'))
+                rel = item.get('relevance', item.get('score', 'N/A'))
+                source = item.get('source', item.get('publisher', 'Alphai'))
+                st.markdown(f"- **{title}**  \n  <span style='color: #8B949E; font-size: 11px;'>Source: {source} | Relevance Score: {rel}</span>", unsafe_allow_html=True)
+        else:
+            st.info("No active USD news items returned for current filters. Check Streamlit secrets key authorization.")
+            
+    with col_n2:
+        st.markdown("#### 🥇 Gold (XAU) Catalyst Stream")
+        xau_news = fetch_live_macro_news("XAU")
+        if xau_news:
+            for item in xau_news[:5]:
+                title = item.get('title', item.get('headline', 'Gold Macro Catalyst'))
+                rel = item.get('relevance', item.get('score', 'N/A'))
+                source = item.get('source', item.get('publisher', 'Alphai'))
+                st.markdown(f"- **{title}**  \n  <span style='color: #8B949E; font-size: 11px;'>Source: {source} | Relevance Score: {rel}</span>", unsafe_allow_html=True)
+        else:
+            st.info("No active Gold news items returned for current filters. Check Streamlit secrets key authorization.")
+
+with tab_report:
+    st.markdown("### 📝 Institutional Research Report")
+    diag_res = econometric_engine.run_diagnostics(dep_var)
+    report_md = write_report(estimation_output, diag_res)
+    st.markdown(report_md)
+    st.download_button(
+        label="Download Institutional Report (.md)",
+        data=report_md,
+        file_name="Institutional_MultiAsset_Report.md",
+        mime="text/markdown",
+        use_container_width=True
+    )
